@@ -91,7 +91,7 @@
 
   // ---------- keyboard ----------
   const KEYS = L.KEYMAP;
-  const typing = e => { const t = e.target; return (t.tagName === 'INPUT' && t.type !== 'range') || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || $('#help').open; };
+  const typing = e => { const t = e.target; return (t.tagName === 'INPUT' && t.type !== 'range') || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || !!document.querySelector('dialog[open]'); };
 
   addEventListener('keydown', e => {
     if (typing(e)) { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.target.blur(); return; }
