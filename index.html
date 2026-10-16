@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lathe</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header id="top">
+  <div id="brand">
+    <b>LATHE</b>
+    <input id="pname" spellcheck="false" aria-label="Project name">
+  </div>
+
+  <div id="clock">
+    <div id="pos">001.1.1</div>
+    <div id="tim">00:00.0</div>
+  </div>
+
+  <div id="transport">
+    <button id="b-home" title="Return to start (Enter)"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="2" height="10"/><path d="M14 3v10L5 8z"/></svg></button>
+    <button id="b-play" title="Play / pause (Space)"><svg class="i-play" viewBox="0 0 16 16"><path d="M4 2v12l10-6z"/></svg><svg class="i-pause" viewBox="0 0 16 16"><rect x="3" y="2" width="4" height="12"/><rect x="9" y="2" width="4" height="12"/></svg></button>
+    <button id="b-rec" title="Record onto the selected track (R)"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/></svg></button>
+    <button id="b-loop" title="Loop (/)"><svg viewBox="0 0 16 16"><path d="M3 5h8V2l4 4-4 4V7H5v3H3zM13 11H5v3l-4-4 4-4v3h6V6h2z" transform="scale(.9) translate(1 1)"/></svg></button>
+  </div>
+
+  <div id="tempo">
+    <label for="bpm">Tempo</label>
+    <input id="bpm" type="number" min="40" max="240" step="1">
+    <span>BPM&ensp;4/4</span>
+    <button id="b-metro" title="Metronome click on or off (M)" aria-label="Metronome"><svg viewBox="0 0 16 16"><path d="M6 1h4l3 14H3zM7.4 3L5.2 13h5.6L8.6 3z"/><rect x="7.5" y="5" width="1" height="7" transform="rotate(18 8 12)"/></svg></button>
+  </div>
+
+  <div id="status"></div>
+
+  <nav id="file">
+    <button id="b-undo" class="ib" title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3 2 7l4 4"/><path d="M2 7h7.5a3.5 3.5 0 0 1 0 7H7"/></svg></button>
+    <button id="b-redo" class="ib" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3l4 4-4 4"/><path d="M14 7H6.5a3.5 3.5 0 0 0 0 7H9"/></svg></button>
+    <i></i>
+    <div class="menu" id="m-file">
+      <button>File<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+      <div class="menu-p">
+        <button id="b-new">New project</button>
+        <button id="b-open">Open project file…</button>
+        <button id="b-save">Save project file<kbd>Ctrl S</kbd></button>
+        <button id="b-export">Export WAV</button>
+        <button id="b-video">Add video to score…</button>
+        <button id="b-exportv">Export video with music</button>
+      </div>
+    </div>
+    <div class="menu" id="m-set">
+      <button class="ib" title="Settings and help" aria-label="Settings and help"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.2v2.3M8 12.5v2.3M1.2 8h2.3M12.5 8h2.3M3.2 3.2l1.6 1.6M11.2 11.2l1.6 1.6M3.2 12.8l1.6-1.6M11.2 4.8l1.6-1.6"/><circle cx="8" cy="8" r="4.6"/></svg></button>
+      <div class="menu-p">
+        <button id="b-tour">Tutorial</button>
+        <button id="b-help">Keyboard shortcuts</button>
+      </div>
+    </div>
+  </nav>
+</header>
+
+<main id="main">
+  <section id="arr">
+    <div id="arr-inner">
+      <div id="ruler-row">
+        <div id="corner">
+          <label>Snap
+            <select id="snap">
+              <option value="4">Bar</option>
+              <option value="1">Beat</option>
+              <option value="0.5">1/8</option>
+              <option value="0.25">1/16</option>
+              <option value="0">Off</option>
+            </select>
+          </label>
+          <span class="zoom"><button id="z-out" title="Zoom out (Ctrl+wheel)">−</button><button id="z-in" title="Zoom in (Ctrl+wheel)">+</button></span>
+        </div>
+        <div id="ruler"></div>
+      </div>
+      <div id="vid-row" class="trow" hidden></div>
+      <div id="arr-rows"></div>
+      <div id="arr-add">
+        <div class="add-cell">
+          <span>Add track</span>
+          <button data-add="synth">Synth</button>
+          <button data-add="drums">Drums</button>
+          <button data-add="audio">Audio</button>
+          <button data-add="import">Import file…</button>
+          <button data-add="video">Video…</button>
+        </div>
+      </div>
+      <div id="recblock" hidden></div>
+      <div id="playhead"></div>
+    </div>
+  </section>
+  <aside id="side"><div id="monitor" hidden></div><div id="insp"></div></aside>
+</main>
+
+<div id="grip" title="Drag to resize"></div>
+<section id="dock">
+  <nav id="tabs">
+    <button data-tab="editor" class="on">Editor</button>
+    <button data-tab="keys">Keys</button>
+    <button data-tab="guide">Styles</button>
+    <button data-tab="sounds">Sounds</button>
+    <button data-tab="mixer">Mixer</button>
+  </nav>
+  <div id="editor"></div>
+  <div id="keys" hidden></div>
+  <div id="guide" hidden></div>
+  <div id="sounds" hidden></div>
+  <div id="mixer" hidden></div>
+</section>
+
+<dialog id="help">
+  <h2>Keys</h2>
+  <dl>
+    <dt>Space</dt><dd>Play / pause</dd>
+    <dt>Enter</dt><dd>Return to start</dd>
+    <dt>R</dt><dd>Record onto the selected track</dd>
+    <dt>/ &nbsp; M</dt><dd>Loop, metronome</dd>
+    <dt>A W S E D F T G Y H U J K</dt><dd>Play the selected instrument</dd>
+    <dt>Z &nbsp; X</dt><dd>Octave down, up</dd>
+    <dt>Styles tab</dt><dd>Pick a kind of music; it sets key, tempo and instruments and marks the notes that fit</dd>
+    <dt>File, Add video</dt><dd>Score to picture: the video follows the playhead</dd>
+    <dt>1 to 7</dt><dd>Play the seven chords of the key chosen in the Keys tab</dd>
+    <dt>Ctrl + Z / Shift + Z</dt><dd>Undo, redo</dd>
+    <dt>Ctrl + C / V / D</dt><dd>Copy, paste, duplicate (clips or notes)</dd>
+    <dt>Ctrl + E</dt><dd>Split clip at the playhead</dd>
+    <dt>Delete</dt><dd>Remove selected clip or notes</dd>
+    <dt>Arrows</dt><dd>Editor: transpose and nudge notes (Shift = octave)</dd>
+    <dt>Q</dt><dd>Editor: quantize</dd>
+    <dt>Ctrl + wheel</dt><dd>Zoom timeline or editor</dd>
+    <dt>Shift while dragging</dt><dd>Ignore snap</dd>
+    <dt>Ctrl + drag a clip</dt><dd>Drag out a copy</dd>
+  </dl>
+  <p>Timeline: double-click an empty lane to make a clip, double-click a clip to edit it. Drag in the thin strip above the bar numbers to set the loop. Drop audio files anywhere on the timeline.</p>
+  <form method="dialog"><button>Close</button></form>
+</dialog>
+<input id="f-open" type="file" accept=".json,.lathe" hidden>
+<input id="f-video" type="file" accept="video/*" hidden>
+<input id="f-audio" type="file" accept="audio/*" multiple hidden>
+
+<script src="js/util.js"></script>
+<script src="js/state.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/perform.js"></script>
+<script src="js/library.js"></script>
+<script src="js/arrange.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/keyboard.js"></script>
+<script src="js/guide.js"></script>
+<script src="js/video.js"></script>
+<script src="js/main.js"></script>
+<script src="js/tutorial.js"></script>
+</body>
+</html>
