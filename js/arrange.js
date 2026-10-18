@@ -31,25 +31,50 @@ L.arr = (() => {
           <input class="t-vol" type="range" min="0" max="1" step="0.005" value="${t.vol}" title="Volume">
           <div class="t-meter" data-meter="${t.id}" data-dir="x"><i></i></div>
         </div>
-        <div class="lane">${t.clips.map(c => `<div class="clip${c.id === L.sel.clip ? ' sel' : ''}" data-clip="${c.id}" style="left:${c.start * ppb}px;width:${Math.max(4, c.len * ppb - 1)}px;--c:${SHADES[i % SHADES.length]}"><span>${esc(c.name)}</span><canvas></canvas><i class="c-l"></i><i class="c-r"></i></div>`).join('')}</div>
+        <div class="lane">${t.clips.map(c => `<div class="clip${c.id === L.sel.clip ? ' sel' : ''}${c.loop ? ' looped' : ''}" data-clip="${c.id}" style="left:${c.start * ppb}px;width:${Math.max(4, c.len * ppb - 1)}px;--c:${SHADES[i % SHADES.length]};--rep:${(c.loop || c.len) * ppb}px"><span>${esc(c.name)}</span><canvas></canvas><i class="c-l"></i><i class="c-r" title="Drag to change the length (adds empty space)"></i><i class="c-loop" title="Drag to repeat this clip">${L.icon('loop')}</i></div>`).join('')}</div>
       </div>`).join('');
     drawClips();
     if (L.video) L.video.lane();
   }
 
-  function drawClips() {
-    const spb = L.spb();
-    for (const el of rows.querySelectorAll('.clip')) {
-      const r = L.clipById(el.dataset.clip), cv = el.querySelector('canvas'); if (!r) continue;
-      const c = r.clip;
-      cv.width = clamp(Math.round(c.len * L.view.ppb), 4, 2400); cv.height = 40;
-      if (r.track.type === 'audio') { L.drawWave(cv, L.buffers.get(c.buf), c.offset, c.offset + c.len * spb, '#1c1b19'); continue; }
-      const x = cv.getContext('2d'), ns = c.notes.filter(n => n.s < c.len);
-      if (!ns.length) continue;
-      const lo = Math.min(...ns.map(n => n.p)), hi = Math.max(...ns.map(n => n.p)), span = Math.max(6, hi - lo + 1), k = cv.width / c.len;
-      x.fillStyle = '#1c1b19';
-      for (const n of ns) x.fillRect(n.s * k, 2 + (hi - n.p) / span * 34, Math.max(2, Math.min(n.l, c.len - n.s) * k - 1), Math.max(2, 34 / span - 1));
+  function drawClips() { for (const el of rows.querySelectorAll('.clip')) drawClip(el); }
+  // A looped clip shows its content once per repeat.
+  function drawClip(el) {
+    const r = L.clipById(el.dataset.clip), cv = el.querySelector('canvas'); if (!r) return;
+    const c = r.clip, cl = c.loop || c.len, spb = L.spb();
+    cv.width = clamp(Math.round(c.len * L.view.ppb), 4, 2400); cv.height = 40;
+    const k = cv.width / c.len, x = cv.getContext('2d');
+    if (r.track.type === 'audio') {
+      const one = document.createElement('canvas');
+      one.width = Math.max(1, Math.round(cl * k)); one.height = 40;
+      L.drawWave(one, L.buffers.get(c.buf), c.offset, c.offset + cl * spb, '#1c1b19');
+      for (let s = 0; s < c.len; s += cl) x.drawImage(one, Math.round(s * k), 0);
+      return;
     }
+    const ns = c.notes.filter(n => n.s < cl);
+    if (!ns.length) return;
+    const lo = Math.min(...ns.map(n => n.p)), hi = Math.max(...ns.map(n => n.p)), span = Math.max(6, hi - lo + 1);
+    x.fillStyle = '#1c1b19';
+    for (let s = 0; s < c.len - 1e-9; s += cl) for (const n of ns) {
+      if (s + n.s >= c.len) continue;
+      x.fillRect((s + n.s) * k, 2 + (hi - n.p) / span * 34, Math.max(2, Math.min(n.l, cl - n.s, c.len - s - n.s) * k - 1), Math.max(2, 34 / span - 1));
+    }
+  }
+  const setRep = (el, c) => el.style.setProperty('--rep', (c.loop || c.len) * L.view.ppb + 'px');
+
+  // Turns a looped clip back into plain material: MIDI repeats become real notes; audio repeats become separate clips.
+  function unroll(t, c) {
+    if (!c.loop) return;
+    const cl = c.loop;
+    if (t.type !== 'audio') {
+      const notes = [];
+      for (let s = 0; s < c.len - 1e-9; s += cl) for (const n of c.notes) if (n.s < cl && s + n.s < c.len) notes.push({ ...n, s: s + n.s, l: Math.min(n.l, cl - n.s) });
+      c.notes = notes;
+    } else {
+      for (let s = cl; s < c.len - 1e-9; s += cl) { const k = cloneClip(c); delete k.loop; k.start = c.start + s; k.len = Math.min(cl, c.len - s); t.clips.push(k); }
+      c.len = Math.min(cl, c.len);
+    }
+    delete c.loop;
   }
 
   // ---------- clip operations ----------
@@ -68,7 +93,12 @@ L.arr = (() => {
       t.clips.push(c); L.sel.clip = c.id; L.commit();
     },
     split() {
-      const r = cur(), at = L.pos; if (!r) return;
+      let r = cur(); const at = L.pos; if (!r) return;
+      if (r.clip.loop) {
+        unroll(r.track, r.clip);
+        const hit = r.track.clips.find(x => x.start <= at && x.start + x.len > at);
+        if (hit) r = { track: r.track, clip: hit };
+      }
       const c = r.clip, cut = at - c.start;
       if (cut <= 0.01 || cut >= c.len - 0.01) return L.toast('Put the playhead inside the selected clip to split it');
       const right = cloneClip(c); right.start = at; right.len = c.len - cut; c.len = cut;
@@ -96,7 +126,8 @@ L.arr = (() => {
     if (e.button !== 0) return;
     let c = t.clips.find(x => x.id === cel.dataset.clip);
     if (L.dbl('clip' + c.id)) { L.select(t.id, c.id); L.showTab('editor'); return; }
-    const mode = e.target.classList.contains('c-r') ? 'r' : e.target.classList.contains('c-l') ? 'l' : 'm';
+    const mode = e.target.closest('.c-loop') ? 'loop' : e.target.classList.contains('c-r') ? 'r' : e.target.classList.contains('c-l') ? 'l' : 'm';
+    if (mode === 'l' && c.loop) { unroll(t, c); render(); }
     let copied = false;
     if (mode === 'm' && (e.ctrlKey || e.metaKey)) { c = cloneClip(c); t.clips.push(c); copied = true; L.sel.clip = null; }
     L.select(t.id, c.id);
@@ -104,7 +135,9 @@ L.arr = (() => {
     const el = rows.querySelector(`[data-clip="${c.id}"]`);
     const audio = t.type === 'audio', spb = L.spb(), s0 = c.start, len0 = c.len, off0 = c.offset, notes0 = c.notes;
     const ti0 = p.tracks.indexOf(t), minLen = L.view.snap || 0.25;
-    const maxLen = audio && L.buffers.get(c.buf) ? (L.buffers.get(c.buf).duration - c.offset) / spb : Infinity;
+    // an audio clip cannot run past the end of its recording unless it is repeating
+    const maxLen = audio && !c.loop && L.buffers.get(c.buf) ? (L.buffers.get(c.buf).duration - c.offset) / spb : Infinity;
+    if (mode === 'loop' && !c.loop) c.loop = len0;
     let home = t, moved = copied;
     L.drag(e, (dx, dy, ev) => {
       const db = dx / ppb; moved = true;
@@ -116,18 +149,24 @@ L.arr = (() => {
           rows.querySelector(`[data-track="${dest.id}"] .lane`).append(el);
         }
         el.style.left = c.start * ppb + 'px';
-      } else if (mode === 'r') {
+      } else if (mode === 'r' || mode === 'loop') {
+        // right edge: longer clip, notes stay where they are (empty space, or more repeats if the clip loops)
         c.len = clamp(snap(s0 + len0 + db, ev) - s0, minLen, maxLen);
         el.style.width = c.len * ppb - 1 + 'px';
+        el.classList.toggle('looped', !!c.loop && c.len > c.loop + 1e-9);
+        setRep(el, c); drawClip(el);
       } else {
         const lo = audio ? Math.max(0, s0 - off0 / spb) : 0;
         c.start = clamp(snap(s0 + db, ev), lo, s0 + len0 - minLen); c.len = len0 - (c.start - s0);
         if (audio) c.offset = off0 + (c.start - s0) * spb;
+        if (!audio) { const d = c.start - s0; c.notes = notes0.map(n => ({ ...n, s: n.s - d })).filter(n => n.s >= 0); }
         el.style.left = c.start * ppb + 'px'; el.style.width = c.len * ppb - 1 + 'px';
+        setRep(el, c); drawClip(el);
       }
     }, () => {
       if (!moved) return;
-      if (mode === 'l' && !audio) { const d = c.start - s0; c.notes = notes0.map(n => ({ ...n, s: n.s - d })).filter(n => n.s >= 0); }
+      // pulled back inside one repeat: it is a plain clip again
+      if (c.loop && c.len <= c.loop + 1e-9) delete c.loop;
       L.sel.track = home.id; L.commit();
     });
   });
@@ -235,5 +274,5 @@ L.arr = (() => {
     }
   }
 
-  return { render, tick, addTrack, delTrack, ...ops };
+  return { render, tick, addTrack, delTrack, unroll, ...ops };
 })();

@@ -149,7 +149,77 @@ L.engine = (() => {
     g.live.add(v);
     return v;
   }
-  const voice = (g, dest, I, pitch, vel, t) => (I.sf ? sampVoice : synthVoice)(g, dest, I, pitch, vel, t);
+  // Plucked string (Karplus-Strong): a short burst of noise circulates through a delay one period long,
+  // losing a little top end each pass, which is how a real string's tone darkens as it rings.
+  const plucks = new Map();
+  let pluckRR = 0;
+  function pluckBuffer(c, P, pitch, vb, rr) {
+    const key = [c.sampleRate, P.bright, P.decay, P.pos, pitch, vb, rr].join('|');
+    if (plucks.has(key)) return plucks.get(key);
+    const sr = c.sampleRate, f = 440 * 2 ** ((pitch - 69) / 12), len = Math.floor(sr * Math.min(8, P.decay * 1.3 + 0.2));
+    const b = c.createBuffer(1, len, sr), y = b.getChannelData(0);
+    const D = sr / f - 0.5, di = Math.floor(D), fr = D - di, N = Math.max(2, Math.round(sr / f));
+    const g = Math.pow(10, -3 / (P.decay * f)); // loss per pass: 60 dB down after P.decay seconds
+    // the pluck: noise, softened by a low-pass (finger or pick), notched by where along the string it is plucked
+    const alpha = Math.min(0.98, Math.max(0.04, 0.08 + 0.85 * P.bright * (0.55 + 0.25 * vb))), raw = new Float32Array(N), exc = new Float32Array(N);
+    let lp = 0, mean = 0;
+    for (let i = 0; i < N; i++) { lp += alpha * (Math.random() * 2 - 1 - lp); raw[i] = lp; }
+    const at = Math.max(1, Math.round(N * P.pos));
+    for (let i = 0; i < N; i++) { exc[i] = raw[i] - (i >= at ? raw[i - at] : 0); mean += exc[i] / N; }
+    let prev = 0, peak = 0;
+    for (let n = 0; n < len; n++) {
+      const i0 = n - di, d0 = i0 >= 0 ? y[i0] : 0, d1 = i0 - 1 >= 0 ? y[i0 - 1] : 0;
+      const del = d0 + (d1 - d0) * fr;
+      y[n] = (n < N ? exc[n] - mean : 0) + g * 0.5 * (del + prev);
+      prev = del;
+      const a = Math.abs(y[n]); if (a > peak) peak = a;
+    }
+    const k = peak ? 0.4 / peak : 0, fade = Math.floor(sr * 0.05);
+    for (let n = 0; n < len; n++) y[n] *= k * (n > len - fade ? (len - n) / fade : 1);
+    if (plucks.size > 600) plucks.delete(plucks.keys().next().value);
+    plucks.set(key, b);
+    return b;
+  }
+  function pluckVoice(g, dest, I, pitch, vel, t) {
+    const c = g.ctx, P = I.pluck, r = I.r ?? 0.15;
+    const s = c.createBufferSource(), hp = c.createBiquadFilter(), body = c.createBiquadFilter(), tone = c.createBiquadFilter(), amp = c.createGain();
+    s.buffer = pluckBuffer(c, P, pitch, vel < 0.45 ? 0 : vel < 0.8 ? 1 : 2, pluckRR++ % 2);
+    hp.type = 'highpass'; hp.frequency.value = P.hp || 70;
+    body.type = 'peaking'; body.frequency.value = P.body || 200; body.Q.value = 1.3; body.gain.value = P.body ? 5 : 0;
+    tone.type = 'lowpass'; tone.frequency.value = P.tone || 8000; tone.Q.value = 0.5;
+    amp.gain.setValueAtTime(vel * (I.gain ?? 1), t);
+    s.connect(hp).connect(body).connect(tone).connect(amp).connect(dest); s.start(t);
+    const v = {
+      release(tr) { tr = Math.max(tr, t + 0.02); amp.gain.setTargetAtTime(0, tr, r / 4); s.stop(tr + r * 1.6 + 0.05); },
+      kill() { try { s.stop(); } catch { /* not started */ } },
+    };
+    s.onended = () => g.live.delete(v);
+    g.live.add(v);
+    return v;
+  }
+  const voice = (g, dest, I, pitch, vel, t) => (I.sf ? sampVoice : I.pluck ? pluckVoice : synthVoice)(g, dest, I, pitch, vel, t);
+
+  // A looped clip plays its first `loop` beats over and over until its length runs out.
+  const content = c => c.loop || c.len;
+  const segments = c => {
+    if (!c.loop) return [c];
+    const out = [];
+    for (let r = 0; r * c.loop < c.len - 1e-9; r++) out.push({ ...c, start: c.start + r * c.loop, len: Math.min(c.loop, c.len - r * c.loop) });
+    return out;
+  };
+  // Chords on strummed instruments: each string a few milliseconds after the last, low to high
+  // (on the off-beat eighth notes, high to low, like an up-strum).
+  function strumOffsets(c, st) {
+    const m = new Map(), groups = {};
+    c.notes.forEach(n => (groups[n.s.toFixed(3)] ||= []).push(n));
+    for (const arr of Object.values(groups)) {
+      if (arr.length < 2) continue;
+      arr.sort((x, y) => x.p - y.p);
+      const up = Math.round(arr[0].s * 2) % 2 === 1;
+      arr.forEach((n, i) => m.set(n, (up ? arr.length - 1 - i : i) * st));
+    }
+    return m;
+  }
 
   function drumHit(g, dest, I, lane, vel, t) {
     const c = g.ctx, d = I.decay, tune = 2 ** (I.tune / 12), out = c.createGain();
@@ -213,20 +283,26 @@ L.engine = (() => {
       const n = g.tracks.get(t.id); if (!n) continue;
       for (const c of t.clips) {
         if (c.start >= b || c.start + c.len <= a) continue;
-        if (t.type === 'audio') { if (c.start >= a) startAudio(g, proj, n, c, c.start, b2t, limit); continue; }
-        for (const nt of c.notes) {
-          const s = c.start + nt.s;
-          if (nt.s >= c.len || s < a || s >= b) continue;
-          const time = b2t(s);
-          if (t.type === 'drums') drumHit(g, n.in, t.inst, lane(nt.p), nt.v, time);
-          else voice(g, n.in, t.inst, nt.p, nt.v, time).release(time + Math.min(nt.l, c.len - nt.s) * spb);
+        if (t.type === 'audio') { for (const sg of segments(c)) if (sg.start >= a && sg.start < b) startAudio(g, proj, n, sg, sg.start, b2t, limit); continue; }
+        const cl = content(c), st = t.type === 'synth' && t.inst.strum ? strumOffsets(c, t.inst.strum) : null;
+        for (let r = 0; r * cl < c.len - 1e-9; r++) {
+          const base = c.start + r * cl;
+          if (base >= b) break;
+          if (base + cl <= a) continue;
+          for (const nt of c.notes) {
+            const rel = r * cl + nt.s, s = c.start + rel;
+            if (nt.s >= cl || rel >= c.len || s < a || s >= b) continue;
+            const time = b2t(s) + (st && st.get(nt) || 0);
+            if (t.type === 'drums') drumHit(g, n.in, t.inst, lane(nt.p), nt.v, time);
+            else voice(g, n.in, t.inst, nt.p, nt.v, time).release(b2t(s) + Math.min(nt.l, cl - nt.s, c.len - rel) * spb);
+          }
         }
       }
     }
   }
   function startSpanning(g, proj, beat, b2t, limit) {
-    for (const t of proj.tracks) if (t.type === 'audio') for (const c of t.clips)
-      if (c.start < beat && c.start + c.len > beat) startAudio(g, proj, g.tracks.get(t.id), c, beat, b2t, limit);
+    for (const t of proj.tracks) if (t.type === 'audio') for (const c of t.clips) for (const sg of segments(c))
+      if (sg.start < beat && sg.start + sg.len > beat) startAudio(g, proj, g.tracks.get(t.id), sg, beat, b2t, limit);
   }
 
   // ---------- live transport ----------
@@ -395,9 +471,10 @@ L.engine = (() => {
     const p = L.project, spb = 60 / p.bpm, end = L.projectEnd();
     if (!end) throw new Error('The project is empty');
     await L.lib.ready(p);
-    const oc = new OfflineAudioContext(2, Math.ceil((end * spb + 2.5) * 44100), 44100);
+    const oc = new OfflineAudioContext(2, Math.ceil((end * spb + 2.55) * 44100), 44100);
     const g = makeGraph(oc, p);
-    scheduleRange(g, p, 0, end + 1e-6, b => b * spb, Infinity);
+    // a short lead-in: the output limiter needs a moment to settle, or the very first note comes out quiet
+    scheduleRange(g, p, 0, end + 1e-6, b => 0.05 + b * spb, Infinity);
     return new Blob([L.wav(await oc.startRendering())], { type: 'audio/wav' });
   };
 

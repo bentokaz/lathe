@@ -469,3 +469,12 @@ button.ib { width: 28px; height: 26px; padding: 0; display: inline-grid; place-i
 .fb-foot button { padding: 7px 12px; }
 .fb-foot .strong { background: var(--ink); color: var(--paper); }
 .fb-foot .strong:hover { background: var(--sig); border-color: var(--sig); color: var(--ink); }
+
+/* ---------- clip repeat handle ---------- */
+.c-loop { position: absolute; right: 0; top: 0; width: 17px; height: 15px; display: grid; place-items: center; cursor: ew-resize; color: var(--ink); background: var(--c); border-left: 1px solid rgba(28, 27, 25, .35); border-bottom: 1px solid rgba(28, 27, 25, .35); border-radius: 0 2px 0 2px; opacity: 0; z-index: 2; }
+.clip.sel .c-loop { background: var(--sig); }
+.clip:hover .c-loop, .clip.sel .c-loop, .clip.looped .c-loop { opacity: 1; }
+.c-loop .ic { width: 11px; height: 11px; stroke-width: 1.6; }
+.c-loop:hover { background: var(--ink); color: var(--paper); }
+.clip.looped::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to right, transparent 0 calc(var(--rep) - 1px), rgba(28, 27, 25, .55) calc(var(--rep) - 1px) var(--rep)); }
+.clip .c-r { top: 15px; }

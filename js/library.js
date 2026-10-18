@@ -26,9 +26,22 @@ L.lib = (() => {
   ];
   const KITS = [['Standard', 0, 1], ['Deep 808', -5, 1.7], ['Tight', 3, 0.6], ['Low and slow', -9, 1.3], ['Bright', 6, 0.85], ['Gated', 0, 0.42], ['Roomy', -2, 1.45], ['Bedroom machine', 2, 0.55]];
   // Ready-made sounds: a library instrument plus the effects that make it what it is.
+  // Plucked-string models: bright = pick vs finger, decay = ring time (s), pos = where along the string,
+  // body = main wooden-body resonance (Hz, 0 for solid electric), tone = final low-pass, strum = gap between strings (s).
+  const PLUCKS = [
+    ['Nylon guitar', { bright: 0.32, decay: 4.2, pos: 0.18, body: 190, tone: 5200 }, 0.022, 0.2],
+    ['Steel-string acoustic', { bright: 0.72, decay: 5.5, pos: 0.12, body: 170, tone: 9500 }, 0.018, 0.2],
+    ['Twelve-string jangle', { bright: 0.85, decay: 4.8, pos: 0.1, body: 220, tone: 11000 }, 0.012, 0.2],
+    ['Clean electric', { bright: 0.55, decay: 7, pos: 0.16, body: 0, tone: 6500 }, 0.015, 0.15],
+    ['Jazz guitar', { bright: 0.28, decay: 4.5, pos: 0.22, body: 0, tone: 2600 }, 0.014, 0.12],
+    ['Ukulele', { bright: 0.55, decay: 1.9, pos: 0.2, body: 430, tone: 7500, hp: 140 }, 0.02, 0.12],
+    ['Banjo', { bright: 0.9, decay: 1.4, pos: 0.08, body: 650, tone: 9000, hp: 120 }, 0.014, 0.1],
+    ['Harp', { bright: 0.35, decay: 6.5, pos: 0.5, body: 0, tone: 6000 }, 0.03, 0.6],
+    ['Plucked bass', { bright: 0.3, decay: 4, pos: 0.2, body: 0, tone: 2400, hp: 35 }, 0, 0.1],
+  ];
   const COMBOS = [
-    ['Dream guitar', 'gm:electric_guitar_clean', { r: 0.9 }, { chorus: { rate: 0.6, depth: 0.6, mix: 0.55 }, delay: { time: 0.75, fb: 0.45, mix: 0.3 }, reverb: { size: 4, mix: 0.4 } }],
-    ['Jangle guitar', 'gm:electric_guitar_clean', {}, { chorus: { rate: 1.2, depth: 0.35, mix: 0.3 }, eq: { low: -3, mid: 0, high: 4.5 }, reverb: { size: 1.2, mix: 0.14 } }],
+    ['Dream guitar', 'pluck:Clean electric', { r: 0.9 }, { chorus: { rate: 0.6, depth: 0.6, mix: 0.55 }, delay: { time: 0.75, fb: 0.45, mix: 0.3 }, reverb: { size: 4, mix: 0.4 } }],
+    ['Jangle guitar', 'pluck:Twelve-string jangle', {}, { chorus: { rate: 1.2, depth: 0.35, mix: 0.3 }, eq: { low: -3, mid: 0, high: 4.5 }, reverb: { size: 1.2, mix: 0.14 } }],
     ['Shoegaze wall', 'gm:overdriven_guitar', { r: 1.2 }, { chorus: { rate: 0.4, depth: 0.8, mix: 0.6 }, eq: { low: 2, mid: -2, high: -3 }, reverb: { size: 5, mix: 0.5 } }],
     ['Tape keys', 'gm:electric_piano_1', {}, { chorus: { rate: 0.35, depth: 0.85, mix: 0.5 }, eq: { low: 1, mid: 0, high: -7 }, reverb: { size: 1.4, mix: 0.16 } }],
     ['Dream pad', 'synth:Pad', { cut: 1900, a: 0.8, r: 2.2 }, { chorus: { rate: 0.5, depth: 0.7, mix: 0.5 }, reverb: { size: 5, mix: 0.45 } }],
@@ -40,6 +53,7 @@ L.lib = (() => {
   const nice = n => { const s = n.replace(/^(lead|pad|fx)_\d_/, '').replace(/_+/g, ' '); return s[0].toUpperCase() + s.slice(1); };
 
   const ALL = [
+    { name: 'Guitars, ukulele and plucked strings', items: PLUCKS.map(([label, pluck, strum, r]) => ({ kind: 'pluck', label, pluck, strum, r })) },
     { name: 'Built-in synth', items: Object.keys(L.PRESETS).map(k => ({ kind: 'synth', label: k })) },
     { name: 'Indie and dream pop', items: COMBOS.map(([label, base, inst, fx]) => ({ kind: 'combo', label, base, inst, fx })) },
     { name: 'Drum kits', items: KITS.map(([label, tune, decay]) => ({ kind: 'kit', label, tune, decay })) },
@@ -140,7 +154,7 @@ L.lib = (() => {
   // ---------- browser panel ----------
   let cat = 0, query = '';
   const current = () => { const t = L.trackById(L.sel.track); return t && t.inst ? t.inst : null; };
-  const isCur = (it, I) => I && (it.kind === 'combo' ? I.preset === it.label : it.kind === 'gm' ? I.sf === it.name : !I.sf && I.preset === it.label && (it.kind === 'kit') === (I.tune !== undefined));
+  const isCur = (it, I) => I && (it.kind === 'combo' || it.kind === 'pluck' ? I.preset === it.label : it.kind === 'gm' ? I.sf === it.name : !I.sf && I.preset === it.label && (it.kind === 'kit') === (I.tune !== undefined));
 
   // with a style in use, its instruments are offered first
   const cats = () => { const g = L.guide && L.guide.items(); return g ? [{ name: 'Suggested for this style', items: g }, ...ALL] : ALL; };
@@ -157,7 +171,7 @@ L.lib = (() => {
     const note = !t ? 'Picking a sound makes a new track.' : t.type === 'audio' ? 'Audio track selected: picking a sound makes a new track.' : `Picking a sound puts it on <b>${esc(t.name)}</b> (a ${t.type === 'drums' ? 'drum' : 'synth'} track; the other kind makes a new track).`;
     host.querySelector('.lib-head').innerHTML = `<h2>${head}</h2><p>${note}${CATS[cat].items[0].kind === 'gm' || query ? ' Sampled instruments download on first use and come with a touch of reverb.' : ''}</p>`;
     host.querySelector('.lib-list').innerHTML = items.length ? items.map(it => {
-      const s = it.kind === 'gm' && sets.get(it.name), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : 'sampled') : it.kind === 'kit' ? 'kit' : it.kind === 'combo' ? 'with effects' : 'synth';
+      const s = it.kind === 'gm' && sets.get(it.name), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : 'sampled') : it.kind === 'kit' ? 'kit' : it.kind === 'pluck' ? 'modelled' : it.kind === 'combo' ? 'with effects' : 'synth';
       return `<button class="${isCur(it, I) ? 'cur' : ''}" data-k="${it.kind}" data-l="${esc(it.label)}"${it.name ? ` data-n="${it.name}"` : ''}><span>${esc(it.label)}</span><small>${tag}</small></button>`;
     }).join('') : '<p class="lib-none">Nothing by that name.</p>';
   }
@@ -172,7 +186,8 @@ L.lib = (() => {
       Object.assign(t.inst, it.inst, { preset: it.label });
       for (const [k, v] of Object.entries(it.fx)) Object.assign(t.fx[k], v, { on: true });
     }
-    else { t.inst = { preset: it.label, sf: it.name, gain: 1, r: 0.3 }; if (!t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 1.6, mix: 0.14 }); }
+    else if (it.kind === 'pluck') { t.inst = { preset: it.label, pluck: { ...it.pluck }, strum: it.strum, r: it.r, gain: 1 }; if (!t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 1.4, mix: 0.12 }); }
+    else { t.inst = { preset: it.label, sf: it.name, gain: 1, r: 0.3, strum: /guitar|banjo|shamisen|koto|sitar|harp/.test(it.name) ? 0.016 : 0 }; if (!t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 1.6, mix: 0.14 }); }
   }
   function pick(it) {
     const want = it.kind === 'kit' ? 'drums' : 'synth';

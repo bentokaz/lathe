@@ -101,6 +101,7 @@ const ICONS = {
   cut: '<circle cx="4" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><path d="M5.7 5.2 14 12M5.7 10.8 14 4"/>',
   gear: '<circle cx="8" cy="8" r="2.2"/><path d="M8 1.2v2.3M8 12.5v2.3M1.2 8h2.3M12.5 8h2.3M3.2 3.2l1.6 1.6M11.2 11.2l1.6 1.6M3.2 12.8l1.6-1.6M11.2 4.8l1.6-1.6"/><circle cx="8" cy="8" r="4.6"/>',
   caret: '<path d="M4 6l4 4 4-4"/>',
+  loop: '<path d="M2.5 9V7.5a3 3 0 0 1 3-3h7M10.5 2.5l2 2-2 2M13.5 7v1.5a3 3 0 0 1-3 3h-7M5.5 13.5l-2-2 2-2"/>',
   flag: '<path d="M4 14.5V2M4 2.8h8.5l-2.2 3 2.2 3H4"/>',
   film: '<rect x="1.5" y="3" width="13" height="10"/><path d="M4.5 3v10M11.5 3v10M1.5 6.3h3M1.5 9.7h3M11.5 6.3h3M11.5 9.7h3"/>',
   rec: '<circle cx="8" cy="8" r="4.5" fill="currentColor"/>',

@@ -18,13 +18,19 @@ L.perf = (() => {
   function down(id, pitches, vel = L.view.vel) {
     if (held.has(id)) return;
     const ps = !isSynth() || pitches.length > 1 ? pitches : expand(pitches[0]);
-    if (S.arp === 'Off' || !isSynth()) { held.set(id, { raw: ps }); ps.forEach(p => E.noteOn(p, vel)); return; }
+    if (S.arp === 'Off' || !isSynth()) {
+      const st = isSynth() && ps.length > 1 ? L.trackById(L.sel.track).inst.strum || 0 : 0, h = { raw: ps, timers: [] };
+      held.set(id, h);
+      [...ps].sort((x, y) => x - y).forEach((p, i) => { if (i && st) h.timers.push(setTimeout(() => E.noteOn(p, vel), i * st * 1000)); else E.noteOn(p, vel); });
+      return;
+    }
     held.set(id, { arp: ps, vel });
     if (!timer) start();
   }
   function up(id) {
     const h = held.get(id); if (!h) return;
     held.delete(id);
+    if (h.timers) h.timers.forEach(clearTimeout);
     if (h.raw) h.raw.forEach(p => E.noteOff(p));
   }
 

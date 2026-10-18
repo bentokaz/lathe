@@ -22,7 +22,9 @@ L.panels = (() => {
     ['inst.s', 'Sustain', 0, 1, 0.01, pct],
     ['inst.r', 'Release', 0.02, 4, 0, sec, true],
   ];
-  const SAMPLED = [['inst.gain', 'Level', 0, 2, 0.01, pct], SYNTH[9]];
+  const STRUM = ['inst.strum', 'Strum', 0, 0.06, 0.001, v => v ? Math.round(v * 1000) + ' ms' : 'off'];
+  const SAMPLED = [['inst.gain', 'Level', 0, 2, 0.01, pct], SYNTH[9], STRUM];
+  const PLUCK = [['inst.pluck.bright', 'Brightness', 0, 1, 0.01, pct], ['inst.pluck.decay', 'Ring time', 0.3, 8, 0, sec, true], ['inst.pluck.pos', 'Pluck point', 0.05, 0.5, 0.01, pct], ['inst.pluck.body', 'Body', 0, 800, 10, v => v ? Math.round(v) + ' Hz' : 'none'], STRUM, SAMPLED[0], SYNTH[9]];
   const KIT = [
     ['inst.tune', 'Tune', -12, 12, 1, v => (v > 0 ? '+' : '') + v + ' st'],
     ['inst.decay', 'Decay', 0.4, 2.5, 0.01, v => 'x' + v.toFixed(2)],
@@ -35,7 +37,7 @@ L.panels = (() => {
     ['delay', 'Delay', [['fx.delay.time', 'Time', 0.125, 2, 0.125, v => v + ' beat'], ['fx.delay.fb', 'Feedback', 0, 0.9, 0.01, pct], ['fx.delay.mix', 'Mix', 0, 1, 0.01, pct]]],
     ['reverb', 'Reverb', [['fx.reverb.size', 'Size', 0.3, 6, 0.1, v => v.toFixed(1) + ' s'], ['fx.reverb.mix', 'Mix', 0, 1, 0.01, pct]]],
   ];
-  const DEFS = Object.fromEntries([...SYNTH, SAMPLED[0], ...KIT, ...FX.flatMap(f => f[2])].map(d => [d[0], d]));
+  const DEFS = Object.fromEntries([...SYNTH, SAMPLED[0], STRUM, ...PLUCK, ...KIT, ...FX.flatMap(f => f[2])].map(d => [d[0], d]));
 
   const get = (t, path) => path.split('.').reduce((o, k) => o[k], t);
   const set = (t, path, v) => { const ks = path.split('.'), last = ks.pop(); ks.reduce((o, k) => o[k], t)[last] = v; };
@@ -54,7 +56,9 @@ L.panels = (() => {
     const i = L.project.tracks.indexOf(t);
     let inst;
     const sound = `<div class="prm sel2"><span>Sound</span><button class="i-sound" data-a="browse" title="Open the sound library"><b>${esc(t.inst ? t.inst.preset || 'Standard' : '')}</b>${L.icon('browse')}</button></div>`;
-    if (t.type === 'synth' && t.inst.sf) {
+    if (t.type === 'synth' && t.inst.pluck) {
+      inst = `${sound}<p class="i-note">Modelled plucked string. Chords are strummed string by string; set Strum to off for a block chord.</p>${PLUCK.map(d => row(t, d)).join('')}`;
+    } else if (t.type === 'synth' && t.inst.sf) {
       inst = `${sound}<p class="i-note">Sampled instrument. Bowed, blown and held sounds sustain for as long as the note; plucked and struck ones ring out naturally.</p>${SAMPLED.map(d => row(t, d)).join('')}`;
     } else if (t.type === 'synth') {
       inst = `${sound}

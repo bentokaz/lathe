@@ -19,13 +19,13 @@ L.guide = (() => {
       ['combo:Shoegaze wall|Chords', 'combo:Bedroom bass|Bass', 'combo:Hazy voices|Melody', 'combo:Dream guitar|Colour', 'kit:Roomy|Drums'], [[0, 3, 5, 3], [0, 2, 3, 3]]),
 
     S('bossa', 'Elevator and lobby', 'Lobby bossa', 'Hotel lobby at 3 pm. Play the chords short and off the beat, bass on the root then the fifth, rim clicks instead of a snare, and a vibraphone tune that never hurries.', 5, 'Major', 126,
-      ['gm:electric_piano_1|Chords', 'gm:acoustic_bass|Bass', 'gm:vibraphone|Melody', 'gm:acoustic_guitar_nylon|Colour', 'gm:glockenspiel|Colour', 'kit:Tight|Drums'], [[1, 4, 0, 5], [0, 5, 1, 4]], true),
+      ['gm:electric_piano_1|Chords', 'gm:acoustic_bass|Bass', 'gm:vibraphone|Melody', 'pluck:Nylon guitar|Colour', 'gm:glockenspiel|Colour', 'kit:Tight|Drums'], [[1, 4, 0, 5], [0, 5, 1, 4]], true),
     S('hold', 'Elevator and lobby', 'Please hold', 'Your call is important to us. Smooth electric piano, a sliding bass and a soft sax line that repeats just often enough to notice.', 3, 'Major', 92,
       ['gm:electric_piano_2|Chords', 'gm:fretless_bass|Bass', 'gm:soprano_sax|Melody', 'gm:pad_2_warm|Colour', 'gm:celesta|Colour', 'kit:Low and slow|Drums'], [[0, 3, 2, 5], [1, 4, 0, 0]], true),
     S('store', 'Elevator and lobby', 'Department store', 'Second floor, homewares. Organ chords, a flute tune and a polite little beat. End each phrase with a run of bells for full effect.', 0, 'Major', 108,
       ['gm:drawbar_organ|Chords', 'gm:acoustic_bass|Bass', 'gm:flute|Melody', 'gm:string_ensemble_1|Colour', 'gm:glockenspiel|Colour', 'kit:Standard|Drums'], [[0, 5, 1, 4], [3, 4, 2, 5]], true),
     S('weather', 'Elevator and lobby', 'Local forecast', 'Five-day outlook. Jazz guitar noodling up and down the scale over a warm pad. For the proper cheese, move everything up one key for the last part.', 7, 'Major', 100,
-      ['gm:electric_piano_1|Chords', 'gm:electric_bass_finger|Bass', 'gm:electric_guitar_jazz|Melody', 'gm:pad_2_warm|Colour', 'gm:vibraphone|Colour', 'kit:Tight|Drums'], [[1, 4, 0, 5], [0, 2, 3, 4]], true),
+      ['gm:electric_piano_1|Chords', 'gm:electric_bass_finger|Bass', 'pluck:Jazz guitar|Melody', 'gm:pad_2_warm|Colour', 'gm:vibraphone|Colour', 'kit:Tight|Drums'], [[1, 4, 0, 5], [0, 2, 3, 4]], true),
 
     S('garage', 'Rock', 'Garage rock', 'Loud, simple, fast. Three chords on a crunchy guitar, bass on the root in eighth notes, snare on beats two and four.', 9, 'Mixolydian', 148,
       ['gm:overdriven_guitar|Chords', 'gm:electric_bass_pick|Bass', 'gm:distortion_guitar|Melody', 'gm:rock_organ|Colour', 'kit:Standard|Drums'], [[0, 3, 4, 3], [0, 6, 3, 0]]),
@@ -58,7 +58,7 @@ L.guide = (() => {
     S('chip', 'Game', '8-bit overworld', 'Square waves and a bouncing bass. Keep melodies quick and catchy, arpeggios everywhere.', 0, 'Major', 140,
       ['gm:lead_2_sawtooth|Chords', 'gm:synth_bass_1|Bass', 'gm:lead_1_square|Melody', 'synth:Chip|Melody', 'kit:Tight|Drums'], [[0, 4, 5, 3], [0, 3, 4, 0]]),
     S('forest', 'Game', 'Forest village', 'Friendly and a bit folky. A flute tune over strummed guitar.', 7, 'Mixolydian', 104,
-      ['gm:acoustic_guitar_nylon|Chords', 'gm:acoustic_bass|Bass', 'gm:flute|Melody', 'gm:ocarina|Melody', 'gm:orchestral_harp|Colour'], [[0, 6, 3, 0], [0, 3, 6, 3]]),
+      ['pluck:Nylon guitar|Chords', 'gm:acoustic_bass|Bass', 'gm:flute|Melody', 'gm:ocarina|Melody', 'gm:orchestral_harp|Colour'], [[0, 6, 3, 0], [0, 3, 6, 3]]),
     S('ice', 'Game', 'Ice cavern', 'Glassy bells over a cold pad. High, slow, lots of echo.', 9, 'Dorian', 78,
       ['gm:pad_7_halo|Chords', 'gm:fretless_bass|Bass', 'gm:celesta|Melody', 'gm:music_box|Melody', 'gm:glockenspiel|Colour'], [[0, 3, 0, 6], [0, 2, 3, 6]]),
     S('boss', 'Game', 'Final boss', 'Loud guitar, organ and no rest. Keep the bass hammering the home note.', 0, 'Harmonic minor', 164,
@@ -76,13 +76,15 @@ L.guide = (() => {
       ['gm:tremolo_strings|Chords', 'gm:contrabass|Bass', 'gm:music_box|Melody', 'gm:choir_aahs|Colour', 'gm:timpani|Colour'], [[0, 1, 0, 1], [0, 6, 1, 0]]),
 
     S('lofi', 'Chill and pop', 'Rainy window lo-fi', 'Soft electric piano and a lazy beat. Play a little late and a little quiet.', 2, 'Dorian', 78,
-      ['gm:electric_piano_1|Chords', 'gm:acoustic_bass|Bass', 'gm:vibraphone|Melody', 'gm:electric_guitar_jazz|Colour', 'kit:Low and slow|Drums'], [[0, 3, 0, 3], [0, 6, 3, 0]]),
+      ['gm:electric_piano_1|Chords', 'gm:acoustic_bass|Bass', 'gm:vibraphone|Melody', 'pluck:Jazz guitar|Colour', 'kit:Low and slow|Drums'], [[0, 3, 0, 3], [0, 6, 3, 0]]),
     S('pop', 'Chill and pop', 'Sunny pop', 'The four chords behind a thousand songs. Sing something over them.', 7, 'Major', 112,
-      ['gm:acoustic_guitar_steel|Chords', 'gm:electric_bass_finger|Bass', 'gm:acoustic_grand_piano|Melody', 'gm:string_ensemble_2|Colour', 'kit:Standard|Drums'], [[0, 4, 5, 3], [5, 3, 0, 4]]),
+      ['pluck:Steel-string acoustic|Chords', 'gm:electric_bass_finger|Bass', 'gm:acoustic_grand_piano|Melody', 'gm:string_ensemble_2|Colour', 'kit:Standard|Drums'], [[0, 4, 5, 3], [5, 3, 0, 4]]),
     S('neon', 'Chill and pop', 'Neon drive', 'Eighties night drive: big pad, steady bass, saw lead.', 9, 'Minor', 104,
       ['gm:pad_3_polysynth|Chords', 'gm:synth_bass_1|Bass', 'gm:lead_2_sawtooth|Melody', 'gm:synth_brass_1|Colour', 'kit:Gated|Drums'], [[0, 5, 2, 6], [5, 6, 0, 0]]),
+    S('uke', 'Chill and pop', 'Ukulele sunshine', 'Strum the ukulele on every eighth note (down on the beat, up in between), keep the bass simple and whistle the tune. Four chords and a smile.', 0, 'Major', 112,
+      ['pluck:Ukulele|Chords', 'gm:acoustic_bass|Bass', 'gm:whistle|Melody', 'gm:glockenspiel|Colour', 'kit:Bedroom machine|Drums'], [[0, 4, 5, 3], [0, 5, 3, 4]]),
     S('folk', 'Chill and pop', 'Campfire folk', 'Strummed guitar, a harmonica tune and three easy chords.', 0, 'Major', 92,
-      ['gm:acoustic_guitar_steel|Chords', 'gm:acoustic_bass|Bass', 'gm:harmonica|Melody', 'gm:banjo|Colour', 'gm:fiddle|Colour'], [[0, 3, 4, 0], [0, 5, 3, 4]]),
+      ['pluck:Steel-string acoustic|Chords', 'gm:acoustic_bass|Bass', 'gm:harmonica|Melody', 'gm:banjo|Colour', 'gm:fiddle|Colour'], [[0, 3, 4, 0], [0, 5, 3, 4]]),
   ];
   const GENRES = [...new Set(STYLES.map(s => s.genre))];
   const byId = id => STYLES.find(s => s.id === id) || null;
@@ -98,7 +100,7 @@ L.guide = (() => {
   // ---------- tracks ----------
   const has = k => {
     const it = L.lib.byKey(k); if (!it) return null;
-    return L.project.tracks.find(t => t.inst && (it.kind === 'combo' ? t.inst.preset === it.label : it.kind === 'gm' ? t.inst.sf === it.name : it.kind === 'kit' ? t.type === 'drums' && t.inst.preset === it.label : t.type === 'synth' && !t.inst.sf && t.inst.preset === it.label)) || null;
+    return L.project.tracks.find(t => t.inst && (it.kind === 'combo' || it.kind === 'pluck' ? t.inst.preset === it.label : it.kind === 'gm' ? t.inst.sf === it.name : it.kind === 'kit' ? t.type === 'drums' && t.inst.preset === it.label : t.type === 'synth' && !t.inst.sf && t.inst.preset === it.label)) || null;
   };
   function addInst(k) {
     let t = has(k); if (t) return t;

@@ -12,6 +12,7 @@ L.ed = (() => {
     : { rh: 16, rows: P_HI - P_LO + 1, dir: -1, row: p => P_HI - p, pitch: r => P_HI - r };
   const sn = () => L.view.esnap;
   const q = v => sn() ? Math.round(v / sn()) * sn() : v;
+  const cl = c => c.loop || c.len; // the part of the clip you edit; a looped clip repeats it
 
   function render() {
     const r = ctx();
@@ -32,11 +33,11 @@ L.ed = (() => {
         <span class="lbl">Clip</span><input class="ed-name" value="${esc(c.name)}" spellcheck="false">
         <span class="lbl">Gain</span><input class="ed-gain" type="range" min="0" max="2" step="0.01" value="${c.gain ?? 1}"><output>${L.db(c.gain ?? 1)} dB</output>
         <button class="ib" data-a="split" title="Split at the playhead (Ctrl+E)" aria-label="Split">${L.icon('cut')}</button><button class="ib" data-a="dup" title="Duplicate clip (Ctrl+D)" aria-label="Duplicate">${L.icon('dup')}</button><button class="ib" data-a="del" title="Delete clip (Delete)" aria-label="Delete">${L.icon('trash')}</button>
-        <span class="ed-hint">${buf ? `${(c.len * spb).toFixed(2)} s of ${buf.duration.toFixed(2)} s / ${buf.sampleRate} Hz / ${buf.numberOfChannels} ch` : 'Audio data missing'}</span>
+        <span class="ed-hint">${buf ? `${(cl(c) * spb).toFixed(2)} s${c.loop ? ', repeating' : ''} of ${buf.duration.toFixed(2)} s / ${buf.sampleRate} Hz / ${buf.numberOfChannels} ch` : 'Audio data missing'}</span>
       </div><div class="ed-wave"><canvas></canvas></div>`;
     const cv = host.querySelector('canvas'), box = cv.parentElement;
     cv.width = Math.max(200, box.clientWidth); cv.height = Math.max(60, box.clientHeight);
-    L.drawWave(cv, buf, c.offset, c.offset + c.len * spb, '#d8d3c7');
+    L.drawWave(cv, buf, c.offset, c.offset + cl(c) * spb, '#d8d3c7');
     host.querySelector('.ed-name').onchange = e => { c.name = e.target.value || 'Clip'; L.commit(); };
     const gain = host.querySelector('.ed-gain');
     gain.oninput = () => { c.gain = +gain.value; gain.nextElementSibling.textContent = L.db(c.gain) + ' dB'; };
@@ -59,6 +60,7 @@ L.ed = (() => {
     host.innerHTML = `<div class="ed-bar">
         <span class="lbl">Clip</span><input class="ed-name" spellcheck="false">
         <span class="lbl">Length</span><span class="stepper"><button data-a="len-">−</button><b class="ed-len"></b><button data-a="len+">+</button></span>
+        <button data-a="unroll" hidden title="Turn the repeats into real notes you can change one by one"></button>
         <span class="lbl">Grid</span><select class="ed-snap">${opt(1, '1/4')}${opt(0.5, '1/8')}${opt(0.25, '1/16')}${opt(0.125, '1/32')}${opt(1 / 3, '1/8 T')}${opt(0, 'Off')}</select>
         <button data-a="quant" title="Q">Quantize</button>
         ${drums ? '' : `<span class="lbl">Click draws</span><select class="ed-chord"><option value="Off">A single note</option>${Object.keys(L.CHORDS).map(k => `<option${k === L.view.stamp ? ' selected' : ''}>${k}</option>`).join('')}</select><button data-a="arp" title="Turn the selected notes into an arpeggio at the grid speed">Arpeggiate</button>`}
@@ -96,14 +98,17 @@ L.ed = (() => {
   function update() {
     const r = ctx(); if (!r || r.track.type === 'audio') return;
     const { track: t, clip: c } = r, g = geom(t), e = L.view.eppb, S = L.sel.notes;
-    const gb = c.len + 2;
+    const gb = cl(c) + 2;
     const inner = host.querySelector('.ed-inner'), grid = host.querySelector('.ed-grid');
     inner.style.width = KW + gb * e + 'px';
     grid.style.setProperty('--eppb', e + 'px');
     grid.style.setProperty('--sn', (sn() || 1) * e + 'px');
     const nm = host.querySelector('.ed-name'); if (document.activeElement !== nm) nm.value = c.name;
-    host.querySelector('.ed-len').textContent = +(c.len / 4).toFixed(2) + (c.len === 4 ? ' bar' : ' bars');
-    host.querySelector('.ed-out').style.left = c.len * e + 'px';
+    host.querySelector('.ed-len').textContent = +(cl(c) / 4).toFixed(2) + (cl(c) === 4 ? ' bar' : ' bars');
+    host.querySelector('.ed-out').style.left = cl(c) * e + 'px';
+    const ul = host.querySelector('[data-a="unroll"]');
+    ul.hidden = !c.loop;
+    if (c.loop) ul.textContent = `Repeats x${+(c.len / c.loop).toFixed(2)}: make editable`;
 
     let rl = '';
     for (let b = 0; b < gb; b++) if (b % 4 === 0 || e >= 44) rl += `<span class="${b % 4 ? 'sub' : ''}" style="left:${b * e}px">${Math.floor(b / 4) + 1}${b % 4 ? '.' + (b % 4 + 1) : ''}</span>`;
@@ -205,7 +210,7 @@ L.ed = (() => {
         if (e.target.tagName === 'I') mode = e.target.classList.contains('n-l') ? 'l' : 'r';
       } else if (e.shiftKey) return marquee(e, c, g, rect);
       else {
-        if (bx >= c.len || row < 0 || row >= g.rows) { S.clear(); update(); return; }
+        if (bx >= cl(c) || row < 0 || row >= g.rows) { S.clear(); update(); return; }
         n = { p: g.pitch(row), s: sn() ? Math.floor(bx / sn() + 1e-6) * sn() : bx, l: t.type === 'drums' ? (sn() || 0.25) : lastLen, v: 0.8 };
         c.notes.push(n); S.clear(); S.add(n); moved = true;
         if (t.type === 'synth') (L.CHORDS[L.view.stamp] || []).slice(1).forEach(iv => {
@@ -274,8 +279,9 @@ L.ed = (() => {
   function act(a) {
     const r = ctx(); if (!r || r.track.type === 'audio') return;
     const c = r.clip, S = L.sel.notes, pool = S.size ? [...S] : c.notes;
-    if (a === 'len+') c.len += 4;
-    else if (a === 'len-') { if (c.len <= 4) return; c.len -= 4; }
+    if (a === 'unroll') { L.arr.unroll(r.track, c); S.clear(); }
+    else if (a === 'len+') { if (c.loop) { c.loop += 4; c.len = Math.max(c.len, c.loop); } else c.len += 4; }
+    else if (a === 'len-') { if (cl(c) <= 4) return; if (c.loop) c.loop -= 4; else c.len -= 4; }
     else if (a === 'arp') {
       // spread the selected chord(s) into single notes stepping through their pitches, over the same stretch of time
       if (S.size < 2) return L.toast('Select two or more notes (Shift-drag a box round a chord), then Arpeggiate');
@@ -319,7 +325,7 @@ L.ed = (() => {
       const inside = L.pos >= c.start && L.pos < c.start + c.len;
       const at = k === 'd' ? Math.max(b, a + (sn() || 0.25)) : inside ? q(L.pos - c.start) : a;
       S.clear();
-      src.forEach(n => { n.s += at - a; if (n.s < c.len) { c.notes.push(n); S.add(n); } });
+      src.forEach(n => { n.s += at - a; if (n.s < cl(c)) { c.notes.push(n); S.add(n); } });
       L.commit(); return true;
     }
     if (k === 'q' && !mod) { act('quant'); return true; }
@@ -342,8 +348,10 @@ L.ed = (() => {
 
   function tick(pos) {
     const ph = host.querySelector('.ed-ph'), r = ph && ctx(); if (!r) return;
-    const x = pos - r.clip.start;
-    ph.style.display = x >= 0 && x <= r.clip.len + 2 ? '' : 'none';
+    // inside a looped clip the playhead wraps round the repeated part
+    let x = pos - r.clip.start;
+    if (r.clip.loop && x >= 0 && x < r.clip.len) x %= r.clip.loop;
+    ph.style.display = x >= 0 && x <= cl(r.clip) + 2 ? '' : 'none';
     ph.style.transform = `translateX(${x * L.view.eppb}px)`;
   }
 
