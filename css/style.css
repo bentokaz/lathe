@@ -457,7 +457,7 @@ button.ib { width: 28px; height: 26px; padding: 0; display: inline-grid; place-i
 .fb-kinds { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
 .fb-kinds button { padding: 6px 10px; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; }
 .fb-kinds button.on { background: var(--sig); border-color: var(--sig); color: var(--ink); }
-#fb textarea { width: 100%; resize: vertical; font: 14px/1.45 var(--f); font-stretch: 92%; padding: 8px 10px; border: 1px solid var(--ink); border-radius: 2px; background: #e4e0d6; color: var(--ink); user-select: text; }
+#fb textarea { width: 100%; resize: vertical; font: 14px/1.45 var(--f); font-stretch: 92%; padding: 8px 10px; border: 1px solid var(--ink); border-radius: 2px; background: var(--paper-2); color: var(--ink); user-select: text; }
 #fb textarea:focus { outline: 2px solid var(--sig); outline-offset: 1px; }
 .fb-check { display: flex; align-items: baseline; gap: 7px; margin-top: 10px; font-size: 13px; }
 .fb-check small { color: var(--dim); font-weight: 300; }
@@ -478,3 +478,28 @@ button.ib { width: 28px; height: 26px; padding: 0; display: inline-grid; place-i
 .c-loop:hover { background: var(--ink); color: var(--paper); }
 .clip.looped::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to right, transparent 0 calc(var(--rep) - 1px), rgba(28, 27, 25, .55) calc(var(--rep) - 1px) var(--rep)); }
 .clip .c-r { top: 15px; }
+
+/* ---------- volume automation ---------- */
+svg.auto { position: absolute; left: 0; top: 0; z-index: 2; cursor: crosshair; overflow: visible; touch-action: none; }
+svg.auto polyline, svg.auto .a-flat { fill: none; stroke: var(--sig); stroke-width: 2; }
+svg.auto .a-flat { stroke-dasharray: 4 4; opacity: .7; }
+svg.auto circle { fill: var(--ink); stroke: var(--sig); stroke-width: 2; cursor: grab; }
+svg.auto circle:hover { fill: var(--sig); }
+svg.auto text { fill: var(--paper-3); font: 11px var(--f); pointer-events: none; }
+.t-btns button[data-act="showAuto"].on { background: var(--sig); border-color: var(--sig); color: var(--ink); }
+
+/* ---------- menus ---------- */
+.menu-sep { font-size: 9.5px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; font-stretch: 78%; color: var(--dim); padding: 10px 12px 4px; border-top: 1px solid var(--paper-3); }
+#file .menu-p button.cur::after { content: ""; width: 7px; height: 7px; background: var(--sig); }
+
+/* ---------- themes ---------- */
+/* Slate and Cassette recolour everything; Night darkens the panels while the wells get darker still. */
+:root[data-theme="slate"] { --paper: #ced3d7; --paper-2: #c1c7cc; --paper-3: #b0b7bd; --rule: #8a939b; --ink: #161a1e; --ink-2: #1f252a; --ink-3: #2c333a; --ink-4: #3f4851; --dim: #5b656e; --sig: #e3a326; }
+:root[data-theme="cassette"] { --paper: #dccaa8; --paper-2: #d0bc97; --paper-3: #c2ad86; --rule: #9c8865; --ink: #231a10; --ink-2: #2e2317; --ink-3: #3d3020; --ink-4: #544330; --dim: #6f5c43; --sig: #cf4a2a; }
+:root[data-theme="night"] { --ink: #121211; --ink-2: #1a1918; --ink-3: #272522; --ink-4: #3a3733; --rule: #6e695f; }
+:root[data-theme="night"] body { background: #262523; }
+:root[data-theme="night"] :is(#top, #side, .thead, #corner, .ed-bar, .ed-empty, .ed-corner, .ed-vlab, .kb-bar, .ch-row, #guide, #sounds, #mixer, dialog, #tour) {
+  --paper: #262523; --paper-2: #2e2d2a; --paper-3: #3b3935; --rule: #57534c; --ink: #e7e1d5; --ink-2: #d2ccc0; --ink-3: #bab3a6; --ink-4: #a39c8f; --dim: #8f897e;
+  color: var(--ink);
+}
+:root[data-theme="night"] .trow.sel .lane { background-color: #0d0d0c; }

@@ -46,6 +46,9 @@
         <button id="b-open">Open project file…</button>
         <button id="b-save">Save project file<kbd>Ctrl S</kbd></button>
         <button id="b-export">Export WAV</button>
+        <button id="b-mp3">Export MP3</button>
+        <button id="b-midi">Export MIDI</button>
+        <button id="b-share">Copy a link to this song</button>
         <button id="b-video">Add video to score…</button>
         <button id="b-exportv">Export video with music</button>
       </div>
@@ -57,6 +60,11 @@
         <button id="b-tour">Tutorial</button>
         <button id="b-help">Keyboard shortcuts</button>
         <button id="b-fb2">Send feedback or report a bug</button>
+        <div class="menu-sep">Theme</div>
+        <button data-theme-pick="paper">Paper</button>
+        <button data-theme-pick="slate">Slate</button>
+        <button data-theme-pick="cassette">Cassette</button>
+        <button data-theme-pick="night">Night</button>
       </div>
     </div>
   </nav>
@@ -88,7 +96,7 @@
           <button data-add="synth">Synth</button>
           <button data-add="drums">Drums</button>
           <button data-add="audio">Audio</button>
-          <button data-add="import">Import file…</button>
+          <button data-add="import" title="Audio, MIDI, video or a saved Lathe project">Import file…</button>
           <button data-add="video">Video…</button>
         </div>
       </div>
@@ -124,6 +132,9 @@
     <dt>/ &nbsp; M</dt><dd>Loop, metronome</dd>
     <dt>A W S E D F T G Y H U J K</dt><dd>Play the selected instrument</dd>
     <dt>Z &nbsp; X</dt><dd>Octave down, up</dd>
+    <dt>A on a track</dt><dd>Volume automation: click the line to add points, drag them, right-click to remove</dd>
+    <dt>File menu</dt><dd>Export WAV, MP3 or MIDI; copy a link that gives someone their own copy of the song</dd>
+    <dt>Import file</dt><dd>Audio, MIDI, video or a saved Lathe project</dd>
     <dt>Styles tab</dt><dd>Pick a kind of music; it sets key, tempo and instruments and marks the notes that fit</dd>
     <dt>File, Add video</dt><dd>Score to picture: the video follows the playhead</dd>
     <dt>1 to 7</dt><dd>Play the seven chords of the key chosen in the Keys tab</dd>
@@ -140,9 +151,9 @@
   <p>Timeline: double-click an empty lane to make a clip, double-click a clip to edit it. Drag in the thin strip above the bar numbers to set the loop. Drop audio files anywhere on the timeline.</p>
   <form method="dialog"><button>Close</button></form>
 </dialog>
-<input id="f-open" type="file" accept=".json,.lathe" hidden>
+<input id="f-open" type="file" accept=".json,.lathe,application/json" hidden>
 <input id="f-video" type="file" accept="video/*" hidden>
-<input id="f-audio" type="file" accept="audio/*" multiple hidden>
+<input id="f-audio" type="file" accept="audio/*,video/*,.mid,.midi,.json,.lathe" multiple hidden>
 
 <script src="js/util.js"></script>
 <script src="js/state.js"></script>
@@ -155,6 +166,7 @@
 <script src="js/keyboard.js"></script>
 <script src="js/guide.js"></script>
 <script src="js/video.js"></script>
+<script src="js/files.js"></script>
 <script src="js/main.js"></script>
 <script src="js/feedback.js"></script>
 <script src="js/tutorial.js"></script>

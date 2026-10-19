@@ -27,14 +27,47 @@ L.arr = (() => {
         <div class="thead">
           <div class="t-no">${pad(i + 1, 2)}</div>
           <div class="t-main"><div class="t-name">${esc(t.name)}</div><div class="t-kind">${kind(t)}</div></div>
-          <div class="t-btns"><button data-act="mute" class="${t.mute ? 'on' : ''}" title="Mute">M</button><button data-act="solo" class="solo${t.solo ? ' on' : ''}" title="Solo">S</button><button data-act="del" class="t-del" title="Delete track (Ctrl+Z brings it back)" aria-label="Delete track">${L.icon('trash')}</button></div>
+          <div class="t-btns"><button data-act="mute" class="${t.mute ? 'on' : ''}" title="Mute">M</button><button data-act="solo" class="solo${t.solo ? ' on' : ''}" title="Solo">S</button><button data-act="showAuto" class="${t.showAuto ? 'on' : ''}" title="Volume automation: draw how loud this track is over time">A</button><button data-act="del" class="t-del" title="Delete track (Ctrl+Z brings it back)" aria-label="Delete track">${L.icon('trash')}</button></div>
           <input class="t-vol" type="range" min="0" max="1" step="0.005" value="${t.vol}" title="Volume">
           <div class="t-meter" data-meter="${t.id}" data-dir="x"><i></i></div>
         </div>
-        <div class="lane">${t.clips.map(c => `<div class="clip${c.id === L.sel.clip ? ' sel' : ''}${c.loop ? ' looped' : ''}" data-clip="${c.id}" style="left:${c.start * ppb}px;width:${Math.max(4, c.len * ppb - 1)}px;--c:${SHADES[i % SHADES.length]};--rep:${(c.loop || c.len) * ppb}px"><span>${esc(c.name)}</span><canvas></canvas><i class="c-l"></i><i class="c-r" title="Drag to change the length (adds empty space)"></i><i class="c-loop" title="Drag to repeat this clip">${L.icon('loop')}</i></div>`).join('')}</div>
+        <div class="lane">${t.clips.map(c => `<div class="clip${c.id === L.sel.clip ? ' sel' : ''}${c.loop ? ' looped' : ''}" data-clip="${c.id}" style="left:${c.start * ppb}px;width:${Math.max(4, c.len * ppb - 1)}px;--c:${SHADES[i % SHADES.length]};--rep:${(c.loop || c.len) * ppb}px"><span>${esc(c.name)}</span><canvas></canvas><i class="c-l"></i><i class="c-r" title="Drag to change the length (adds empty space)"></i><i class="c-loop" title="Drag to repeat this clip">${L.icon('loop')}</i></div>`).join('')}${t.showAuto ? `<svg class="auto" width="${tot * ppb}" height="${TH - 1}">${autoSvg(t, tot * ppb)}</svg>` : ''}</div>
       </div>`).join('');
     drawClips();
     if (L.video) L.video.lane();
+  }
+
+  // ---------- volume automation overlay ----------
+  const AP = 7; // padding inside the lane, px
+  const ay = v => AP + (1 - v) * (TH - 1 - 2 * AP);
+  function autoSvg(t, w) {
+    const pts = (t.auto && t.auto.vol) || [], ppb = L.view.ppb;
+    if (!pts.length) return `<line x1="0" x2="${w}" y1="${ay(1)}" y2="${ay(1)}" class="a-flat"/><text x="8" y="${ay(1) + 14}">Click to add a volume point; drag points, right-click to remove</text>`;
+    const xy = pts.map(([b, v]) => [b * ppb, ay(v)]);
+    const line = [[0, xy[0][1]], ...xy, [w, xy[xy.length - 1][1]]].map(p => p.join(',')).join(' ');
+    return `<polyline points="${line}"/>${xy.map(([x, y], i) => `<circle data-i="${i}" cx="${x}" cy="${y}" r="4.5"><title>${Math.round(pts[i][1] * 100)}% (${L.db(pts[i][1] ** 2)} dB)</title></circle>`).join('')}`;
+  }
+  function autoDown(e, t, svg) {
+    L.focus = 'arr';
+    const ppb = L.view.ppb, rect = svg.getBoundingClientRect();
+    const toB = x => Math.max(0, (x - rect.left) / ppb), toV = y => clamp(1 - (y - rect.top - AP) / (TH - 1 - 2 * AP), 0, 1);
+    t.auto ||= { vol: [] };
+    const pts = t.auto.vol;
+    let i = e.target.dataset.i !== undefined ? +e.target.dataset.i : -1;
+    if (e.button === 2) { if (i >= 0) { pts.splice(i, 1); L.commit(); } return; }
+    if (e.button !== 0) return;
+    if (i < 0) {
+      const pt = [snap(toB(e.clientX), e), toV(e.clientY)];
+      pts.push(pt); pts.sort((a, z) => a[0] - z[0]); i = pts.indexOf(pt);
+      svg.innerHTML = autoSvg(t, +svg.getAttribute('width'));
+    }
+    const pt = pts[i];
+    L.drag(e, (dx, dy, ev) => {
+      const lo = i > 0 ? pts[i - 1][0] : 0, hi = i < pts.length - 1 ? pts[i + 1][0] : Infinity;
+      pt[0] = clamp(snap(toB(ev.clientX), ev), lo, hi); pt[1] = toV(ev.clientY);
+      svg.innerHTML = autoSvg(t, +svg.getAttribute('width'));
+      L.toast(`Volume ${Math.round(pt[1] * 100)}% at bar ${(pt[0] / 4 + 1).toFixed(2)}`, 1200);
+    }, () => L.commit());
   }
 
   function drawClips() { for (const el of rows.querySelectorAll('.clip')) drawClip(el); }
@@ -113,6 +146,8 @@ L.arr = (() => {
     const row = e.target.closest('.trow'); if (!row) return;
     const p = L.project, t = L.trackById(row.dataset.track), ppb = L.view.ppb;
     if (e.target.closest('.thead')) { if (!e.target.closest('button,input')) L.select(t.id, null); return; }
+    const asvg = e.target.closest('svg.auto');
+    if (asvg) return autoDown(e, t, asvg);
     L.focus = 'arr';
     const lane = row.querySelector('.lane'), bx = (e.clientX - lane.getBoundingClientRect().left) / ppb;
     const cel = e.target.closest('.clip');
@@ -171,6 +206,7 @@ L.arr = (() => {
     });
   });
 
+  rows.addEventListener('contextmenu', e => { if (e.target.closest('svg.auto')) e.preventDefault(); });
   rows.addEventListener('click', e => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const t = L.trackById(b.closest('.trow').dataset.track);
@@ -231,6 +267,8 @@ L.arr = (() => {
   }
   async function importFiles(files, track, beat) {
     for (const f of files) {
+      if (/\.(json|lathe)$/i.test(f.name) || f.type === 'application/json') { await L.openProjectFile(f); return; }
+      if (/\.midi?$/i.test(f.name) || /midi/.test(f.type)) { await L.files.importMidi(f); continue; }
       if (!f.type.startsWith('audio/') && !/\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(f.name)) continue;
       try {
         L.toast('Reading ' + f.name + '…', 0);

@@ -4,7 +4,11 @@
 L.lib = (() => {
   const { $, esc } = L;
   const host = $('#sounds');
-  const HOST = 'https://gleitz.github.io/midi-js-soundfonts/', FONTS = ['MusyngKite/', 'FluidR3_GM/'], BASE = HOST + FONTS[0];
+  const HOST = 'https://gleitz.github.io/midi-js-soundfonts/', FONTS = ['MusyngKite/', 'FatBoy/', 'FluidR3_GM/'], BASE = HOST + FONTS[0];
+  // instruments whose default recording set sounds noticeably more natural in another set
+  const DEFAULT_FONT = { french_horn: 'FatBoy/' };
+  const fontOf = (name, font) => font || DEFAULT_FONT[name] || FONTS[0];
+  const keyOf = (name, font) => fontOf(name, font) + name;
 
   const GM = [
     ['Piano', 'acoustic_grand_piano bright_acoustic_piano electric_grand_piano honkytonk_piano electric_piano_1 electric_piano_2 harpsichord clavinet'],
@@ -107,15 +111,17 @@ L.lib = (() => {
   const PC = { C: 0, Db: 1, D: 2, Eb: 3, E: 4, F: 5, Gb: 6, G: 7, Ab: 8, A: 9, Bb: 10, B: 11 };
   const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0)).buffer;
 
-  function load(name) {
-    let s = sets.get(name);
+  function load(name, font) {
+    const key = keyOf(name, font);
+    let s = sets.get(key);
     if (s) return s.promise;
     s = { ready: false, bufs: new Map(), meta: new Map(), keys: [], norm: 1 };
-    sets.set(name, s);
+    sets.set(key, s);
     s.promise = (async () => {
       try {
         let res = null;
-        for (const font of FONTS) { try { res = await fetch(HOST + font + name + '-mp3.js'); if (res.ok) break; } catch { res = null; } }
+        const first = fontOf(name, font);
+        for (const f of [first, ...FONTS.filter(x => x !== first)]) { try { res = await fetch(HOST + f + name + '-mp3.js'); if (res.ok) break; } catch { res = null; } }
         if (!res || !res.ok) throw new Error('unreachable');
         const txt = await res.text(), re = /"([A-G]b?)(\d)":\s*"data:audio\/mp3;base64,([^"]+)"/g, jobs = [];
         let m;
@@ -133,23 +139,23 @@ L.lib = (() => {
         render();
         return true;
       } catch (err) {
-        sets.delete(name);
+        sets.delete(key);
         L.toast('Could not load ' + nice(name) + ' (it needs an internet connection)', 6000);
         return false;
       }
     })();
     return s.promise;
   }
-  function sample(name, pitch) {
-    const s = sets.get(name);
-    if (!s || !s.ready) { load(name); return null; }
+  function sample(name, pitch, font) {
+    const s = sets.get(keyOf(name, font));
+    if (!s || !s.ready) { load(name, font); return null; }
     let base = s.keys[0];
     for (const k of s.keys) if (Math.abs(k - pitch) < Math.abs(base - pitch)) base = k;
     return { buf: s.bufs.get(base), base, norm: s.norm, ...s.meta.get(base) };
   }
-  const used = p => [...new Set(p.tracks.map(t => t.inst && t.inst.sf).filter(Boolean))];
-  const ensure = p => used(p).forEach(load);
-  const ready = p => Promise.all(used(p).map(load));
+  const used = p => p.tracks.filter(t => t.inst && t.inst.sf).map(t => [t.inst.sf, t.inst.font]);
+  const ensure = p => used(p).forEach(([n, f]) => load(n, f));
+  const ready = p => Promise.all(used(p).map(([n, f]) => load(n, f)));
 
   // ---------- browser panel ----------
   let cat = 0, query = '';
@@ -171,7 +177,7 @@ L.lib = (() => {
     const note = !t ? 'Picking a sound makes a new track.' : t.type === 'audio' ? 'Audio track selected: picking a sound makes a new track.' : `Picking a sound puts it on <b>${esc(t.name)}</b> (a ${t.type === 'drums' ? 'drum' : 'synth'} track; the other kind makes a new track).`;
     host.querySelector('.lib-head').innerHTML = `<h2>${head}</h2><p>${note}${CATS[cat].items[0].kind === 'gm' || query ? ' Sampled instruments download on first use and come with a touch of reverb.' : ''}</p>`;
     host.querySelector('.lib-list').innerHTML = items.length ? items.map(it => {
-      const s = it.kind === 'gm' && sets.get(it.name), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : 'sampled') : it.kind === 'kit' ? 'kit' : it.kind === 'pluck' ? 'modelled' : it.kind === 'combo' ? 'with effects' : 'synth';
+      const s = it.kind === 'gm' && sets.get(keyOf(it.name)), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : 'sampled') : it.kind === 'kit' ? 'kit' : it.kind === 'pluck' ? 'modelled' : it.kind === 'combo' ? 'with effects' : 'synth';
       return `<button class="${isCur(it, I) ? 'cur' : ''}" data-k="${it.kind}" data-l="${esc(it.label)}"${it.name ? ` data-n="${it.name}"` : ''}><span>${esc(it.label)}</span><small>${tag}</small></button>`;
     }).join('') : '<p class="lib-none">Nothing by that name.</p>';
   }
@@ -199,10 +205,10 @@ L.lib = (() => {
     L.commit();
     const sf = t.inst.sf;
     if (!sf) return L.engine.blip(t.id, it.kind === 'kit' ? 36 : 60);
-    const s = sets.get(sf);
+    const s = sets.get(keyOf(sf, t.inst.font));
     if (s && s.ready) return L.engine.blip(t.id, 60);
     L.toast('Loading ' + it.label + '…', 0);
-    load(sf).then(ok => { if (ok) { L.toast(it.label + ' ready', 1500); if (L.sel.track === t.id) L.engine.blip(t.id, 60); } });
+    load(sf, t.inst.font).then(ok => { if (ok) { L.toast(it.label + ' ready', 1500); if (L.sel.track === t.id) L.engine.blip(t.id, 60); } });
     render();
   }
 

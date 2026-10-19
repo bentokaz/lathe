@@ -1,5 +1,6 @@
 'use strict';
 L.engine = (() => {
+  let E_autoAt;
   const { clamp } = L;
 
   // ---------- graph (works for live and offline contexts) ----------
@@ -45,7 +46,7 @@ L.engine = (() => {
       dIn: c.createGain(), delay: c.createDelay(4), dFb: c.createGain(), dWet: c.createGain(), dOut: c.createGain(),
       rIn: c.createGain(), conv: c.createConvolver(), rWet: c.createGain(), rOut: c.createGain(),
       cIn: c.createGain(), cDel: c.createDelay(0.1), cLfo: c.createOscillator(), cDepth: c.createGain(), cWet: c.createGain(), cOut: c.createGain(),
-      pan: c.createStereoPanner(), vol: c.createGain(), an: c.createAnalyser(),
+      pan: c.createStereoPanner(), vol: c.createGain(), auto: c.createGain(), an: c.createAnalyser(),
     };
     n.an.fftSize = 512; n.shaper.oversample = '2x';
     n.lo.connect(n.mid).connect(n.hi);
@@ -54,7 +55,7 @@ L.engine = (() => {
     // chorus: a short delay whose length is swept by a slow oscillator, mixed with the dry signal
     n.cIn.connect(n.cOut); n.cIn.connect(n.cDel).connect(n.cWet).connect(n.cOut);
     n.cLfo.connect(n.cDepth).connect(n.cDel.delayTime); n.cDel.delayTime.value = 0.018; n.cLfo.start();
-    n.pan.connect(n.vol); n.vol.connect(n.an); n.vol.connect(g.master);
+    n.pan.connect(n.vol); n.vol.connect(n.auto); n.auto.connect(n.an); n.auto.connect(g.master);
     g.tracks.set(t.id, n);
   }
 
@@ -131,7 +132,7 @@ L.engine = (() => {
 
   // Sampled instrument voice: nearest decoded note, repitched.
   function sampVoice(g, dest, I, pitch, vel, t) {
-    const hit = L.lib.sample(I.sf, pitch);
+    const hit = L.lib.sample(I.sf, pitch, I.font);
     if (!hit) return { release() {}, kill() {} };
     const c = g.ctx, s = c.createBufferSource(), tone = c.createBiquadFilter(), amp = c.createGain(), r = I.r ?? 0.3;
     s.buffer = hit.buf; s.playbackRate.value = 2 ** ((pitch - hit.base) / 12);
@@ -300,6 +301,32 @@ L.engine = (() => {
       }
     }
   }
+  // Volume automation: points [beat, level 0..1] joined by straight lines; level 1 leaves the fader as it is.
+  const autoGain = v => v * v;
+  function autoAt(pts, beat) {
+    if (!pts || !pts.length) return 1;
+    if (beat <= pts[0][0]) return pts[0][1];
+    for (let i = 1; i < pts.length; i++) if (beat <= pts[i][0]) {
+      const [b0, v0] = pts[i - 1], [b1, v1] = pts[i];
+      return b1 === b0 ? v1 : v0 + (v1 - v0) * (beat - b0) / (b1 - b0);
+    }
+    return pts[pts.length - 1][1];
+  }
+  function scheduleAuto(g, proj, from, b2t, limit) {
+    const t0 = b2t(from);
+    for (const t of proj.tracks) {
+      const n = g.tracks.get(t.id); if (!n) continue;
+      const pts = t.auto && t.auto.vol, prm = n.auto.gain;
+      prm.cancelScheduledValues(t0);
+      prm.setValueAtTime(autoGain(autoAt(pts, from)), t0);
+      if (pts) for (const [b, v] of pts) if (b > from && b < limit) prm.linearRampToValueAtTime(autoGain(v), b2t(b));
+    }
+  }
+  function autoHold(g, proj, beat) {
+    for (const t of proj.tracks) { const n = g.tracks.get(t.id); if (n) { n.auto.gain.cancelScheduledValues(0); n.auto.gain.value = autoGain(autoAt(t.auto && t.auto.vol, beat)); } }
+  }
+  E_autoAt = autoAt;
+
   function startSpanning(g, proj, beat, b2t, limit) {
     for (const t of proj.tracks) if (t.type === 'audio') for (const c of t.clips) for (const sg of segments(c))
       if (sg.start < beat && sg.start + sg.len > beat) startAudio(g, proj, g.tracks.get(t.id), sg, beat, b2t, limit);
@@ -321,11 +348,13 @@ L.engine = (() => {
   E.reconcile = () => {
     if (!G) return;
     const p = L.project, ids = new Set(p.tracks.map(t => t.id));
-    for (const [id, n] of G.tracks) if (!ids.has(id)) { n.vol.disconnect(); G.tracks.delete(id); }
+    for (const [id, n] of G.tracks) if (!ids.has(id)) { n.vol.disconnect(); n.auto.disconnect(); G.tracks.delete(id); }
     p.tracks.forEach(t => { if (!G.tracks.has(t.id)) addTrack(G, t); });
     syncAll(G, p);
   };
   L.on('change', () => L.lib && L.lib.ensure(L.project));
+  // while stopped, the automation level under the playhead applies
+  L.on('change', () => { if (G && !E.playing) autoHold(G, L.project, L.pos); });
   E.sync = t => { if (G) { t ? syncTrack(G, L.project, t, false) : syncAll(G, L.project, false); } };
 
   E.currentBeat = () => {
@@ -359,6 +388,7 @@ L.engine = (() => {
       A = { time: b2t(lp.end), beat: lp.start };
       anchors.push(A); sched = lp.start;
       startSpanning(G, p, lp.start, b2t, lp.end);
+      scheduleAuto(G, p, lp.start, b2t, lp.end);
       end = A.beat + (horizon - A.time) / spb;
     }
     if (end > sched) { run(sched, end); sched = end; }
@@ -370,6 +400,7 @@ L.engine = (() => {
     const A = { time: ctx.currentTime + 0.08, beat: L.pos }, p = L.project, spb = 60 / p.bpm;
     anchors = [A]; sched = L.pos; E.playing = true;
     startSpanning(G, p, L.pos, b => A.time + (b - A.beat) * spb, p.loop.on && L.pos < p.loop.end ? p.loop.end : Infinity);
+    scheduleAuto(G, p, L.pos, b => A.time + (b - A.beat) * spb, p.loop.on && L.pos < p.loop.end ? p.loop.end : Infinity);
     timer = setInterval(tick, 25); tick();
     L.emit('transport');
   };
@@ -379,6 +410,7 @@ L.engine = (() => {
     L.pos = E.currentBeat(); E.playing = false;
     for (const v of [...G.live]) v.kill();
     G.live.clear(); held.clear();
+    autoHold(G, L.project, L.pos);
     if (E.recording) finishRec();
     L.emit('transport');
   };
@@ -467,7 +499,7 @@ L.engine = (() => {
 
   // ---------- files ----------
   E.decode = ab => { ensure(); return ctx.decodeAudioData(ab); };
-  E.render = async () => {
+  E.renderBuffer = async () => {
     const p = L.project, spb = 60 / p.bpm, end = L.projectEnd();
     if (!end) throw new Error('The project is empty');
     await L.lib.ready(p);
@@ -475,8 +507,11 @@ L.engine = (() => {
     const g = makeGraph(oc, p);
     // a short lead-in: the output limiter needs a moment to settle, or the very first note comes out quiet
     scheduleRange(g, p, 0, end + 1e-6, b => 0.05 + b * spb, Infinity);
-    return new Blob([L.wav(await oc.startRendering())], { type: 'audio/wav' });
+    scheduleAuto(g, p, 0, b => 0.05 + b * spb, Infinity);
+    return oc.startRendering();
   };
+  E.render = async () => new Blob([L.wav(await E.renderBuffer())], { type: 'audio/wav' });
+  E.autoAt = (pts, beat) => E_autoAt(pts, beat);
 
   L.on('change', E.reconcile);
   return E;

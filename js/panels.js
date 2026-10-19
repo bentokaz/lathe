@@ -59,7 +59,8 @@ L.panels = (() => {
     if (t.type === 'synth' && t.inst.pluck) {
       inst = `${sound}<p class="i-note">Modelled plucked string. Chords are strummed string by string; set Strum to off for a block chord.</p>${PLUCK.map(d => row(t, d)).join('')}`;
     } else if (t.type === 'synth' && t.inst.sf) {
-      inst = `${sound}<p class="i-note">Sampled instrument. Bowed, blown and held sounds sustain for as long as the note; plucked and struck ones ring out naturally.</p>${SAMPLED.map(d => row(t, d)).join('')}`;
+      const fonts = [['', 'Best for this instrument'], ['MusyngKite/', 'Set A (MusyngKite)'], ['FatBoy/', 'Set B (FatBoy)'], ['FluidR3_GM/', 'Set C (FluidR3)']];
+      inst = `${sound}<div class="prm sel2"><span>Recording</span><select data-s="font" title="Each set is a different recording of the instrument; try them">${fonts.map(([v, s]) => `<option value="${v}"${(t.inst.font || '') === v ? ' selected' : ''}>${s}</option>`).join('')}</select></div><p class="i-note">Sampled instrument. Bowed, blown and held sounds sustain for as long as the note; plucked and struck ones ring out naturally.</p>${SAMPLED.map(d => row(t, d)).join('')}`;
     } else if (t.type === 'synth') {
       inst = `${sound}
         <div class="prm sel2"><span>Osc 1</span>${sel('o1', t.inst.o1, WAVES)}</div>

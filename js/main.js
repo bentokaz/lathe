@@ -52,6 +52,17 @@
   $('#b-undo').onclick = L.undo;
   $('#b-redo').onclick = L.redo;
   $('#b-help').onclick = () => $('#help').showModal();
+  const THEMES = ['paper', 'slate', 'cassette', 'night'];
+  const setTheme = name => {
+    if (!THEMES.includes(name)) name = 'paper';
+    document.documentElement.dataset.theme = name;
+    $$('[data-theme-pick]').forEach(b => b.classList.toggle('cur', b.dataset.themePick === name));
+    try { localStorage.setItem('lathe.theme', name); } catch { /* storage blocked */ }
+  };
+  let savedTheme = 'paper';
+  try { savedTheme = localStorage.getItem('lathe.theme') || 'paper'; } catch { /* storage blocked */ }
+  setTheme(savedTheme);
+  document.addEventListener('click', e => { const b = e.target.closest('[data-theme-pick]'); if (b) { setTheme(b.dataset.themePick); L.arr.render(); } });
 
   // ---------- files ----------
   const b64 = ab => { const u = new Uint8Array(ab); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
@@ -66,8 +77,7 @@
   }
   $('#b-save').onclick = save;
   $('#b-open').onclick = () => $('#f-open').click();
-  $('#f-open').onchange = async e => {
-    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  L.openProjectFile = async f => {
     try {
       const d = JSON.parse(await f.text());
       if (!d.project || !Array.isArray(d.project.tracks)) throw new Error('not a Lathe project');
@@ -77,6 +87,7 @@
       L.toast('Opened ' + f.name);
     } catch (err) { L.toast('Could not open that file: ' + err.message, 6000); }
   };
+  $('#f-open').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) L.openProjectFile(f); };
   $('#b-new').onclick = () => {
     if (!confirm('Start a new project? The current one is replaced. Save it first if you want to keep it.')) return;
     E.stop(); L.setProject(L.newProject());
@@ -162,6 +173,8 @@
     let p = null;
     try { p = JSON.parse(localStorage.getItem('lathe.project')); } catch { /* corrupt autosave */ }
     if (!p || !Array.isArray(p.tracks)) p = L.demoProject();
+    const shared = await L.files.openFromLink();
+    if (shared && confirm(`Open the shared song "${shared.name}"?\n\nIt replaces the song open in this browser. To keep that one, press Cancel and use File, Save first, then open the link again.`)) p = shared;
     await L.loadBuffers(L.usedBuffers(p));
     await L.video.restore(p);
     $('#snap').value = L.view.snap;
