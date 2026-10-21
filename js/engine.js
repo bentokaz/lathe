@@ -499,16 +499,29 @@ L.engine = (() => {
 
   // ---------- files ----------
   E.decode = ab => { ensure(); return ctx.decodeAudioData(ab); };
-  E.renderBuffer = async () => {
+  // Offline render, much faster than real time. from/dur in seconds of song time (from may be negative when a
+  // video starts before the song); film = { buffer, gain } is the video's own sound, starting at `from`.
+  E.renderBuffer = async (o = {}) => {
     const p = L.project, spb = 60 / p.bpm, end = L.projectEnd();
-    if (!end) throw new Error('The project is empty');
+    if (!end && !o.allowEmpty) throw new Error('The project is empty');
     await L.lib.ready(p);
-    const oc = new OfflineAudioContext(2, Math.ceil((end * spb + 2.55) * 44100), 44100);
+    const sr = o.sampleRate || 44100, LEAD = 0.05, from = o.from || 0, dur = o.dur ?? Math.max(0.5, end * spb + 2.5 - from);
+    const oc = new OfflineAudioContext(2, Math.ceil((dur + LEAD) * sr), sr);
     const g = makeGraph(oc, p);
-    // a short lead-in: the output limiter needs a moment to settle, or the very first note comes out quiet
-    scheduleRange(g, p, 0, end + 1e-6, b => 0.05 + b * spb, Infinity);
-    scheduleAuto(g, p, 0, b => 0.05 + b * spb, Infinity);
-    return oc.startRendering();
+    // a short lead-in lets the output limiter settle (otherwise the first note comes out quiet); it is trimmed off below
+    const b2t = b => LEAD + b * spb - from, fromBeat = Math.max(0, from / spb);
+    scheduleRange(g, p, fromBeat, end + 1e-6, b2t, Infinity);
+    if (fromBeat > 0) startSpanning(g, p, fromBeat, b2t, Infinity);
+    scheduleAuto(g, p, fromBeat, b2t, Infinity);
+    if (o.film && o.film.buffer) {
+      const s = oc.createBufferSource(), gn = oc.createGain();
+      s.buffer = o.film.buffer; gn.gain.value = o.film.gain ?? 1;
+      s.connect(gn).connect(g.master); s.start(LEAD);
+    }
+    const out = await oc.startRendering(), skip = Math.round(LEAD * sr);
+    const trimmed = new AudioBuffer({ length: Math.max(1, out.length - skip), numberOfChannels: 2, sampleRate: sr });
+    for (let c = 0; c < 2; c++) trimmed.copyToChannel(out.getChannelData(c).subarray(skip), c);
+    return trimmed;
   };
   E.render = async () => new Blob([L.wav(await E.renderBuffer())], { type: 'audio/wav' });
   E.autoAt = (pts, beat) => E_autoAt(pts, beat);

@@ -45,12 +45,9 @@
         <button id="b-new">New project</button>
         <button id="b-open">Open project file…</button>
         <button id="b-save">Save project file<kbd>Ctrl S</kbd></button>
-        <button id="b-export">Export WAV</button>
-        <button id="b-mp3">Export MP3</button>
-        <button id="b-midi">Export MIDI</button>
+        <button id="b-export">Export audio, MIDI or video…</button>
         <button id="b-share">Copy a link to this song</button>
         <button id="b-video">Add video to score…</button>
-        <button id="b-exportv">Export video with music</button>
       </div>
     </div>
     <button id="b-fb" class="fb-btn" title="Send feedback or report a bug">Feedback</button>
@@ -61,10 +58,7 @@
         <button id="b-help">Keyboard shortcuts</button>
         <button id="b-fb2">Send feedback or report a bug</button>
         <div class="menu-sep">Theme</div>
-        <button data-theme-pick="paper">Paper</button>
-        <button data-theme-pick="slate">Slate</button>
-        <button data-theme-pick="cassette">Cassette</button>
-        <button data-theme-pick="night">Night</button>
+        <div id="themes"></div>
       </div>
     </div>
   </nav>
@@ -133,8 +127,8 @@
     <dt>A W S E D F T G Y H U J K</dt><dd>Play the selected instrument</dd>
     <dt>Z &nbsp; X</dt><dd>Octave down, up</dd>
     <dt>A on a track</dt><dd>Volume automation: click the line to add points, drag them, right-click to remove</dd>
-    <dt>File menu</dt><dd>Export WAV, MP3 or MIDI; copy a link that gives someone their own copy of the song</dd>
-    <dt>Import file</dt><dd>Audio, MIDI, video or a saved Lathe project</dd>
+    <dt>File menu</dt><dd>Export audio (WAV, AIFF, MP3, AAC, Opus), MIDI, or the video with your music (MP4, MOV, WebM, MKV); copy a link that gives someone their own copy of the song</dd>
+    <dt>Import file</dt><dd>Audio (WAV, AIFF, MP3, AAC/M4A, FLAC, OGG, Opus and more), MIDI, video (MP4, MOV, WebM, MKV and more) or a saved Lathe project</dd>
     <dt>Styles tab</dt><dd>Pick a kind of music; it sets key, tempo and instruments and marks the notes that fit</dd>
     <dt>File, Add video</dt><dd>Score to picture: the video follows the playhead</dd>
     <dt>1 to 7</dt><dd>Play the seven chords of the key chosen in the Keys tab</dd>
@@ -152,8 +146,8 @@
   <form method="dialog"><button>Close</button></form>
 </dialog>
 <input id="f-open" type="file" accept=".json,.lathe,application/json" hidden>
-<input id="f-video" type="file" accept="video/*" hidden>
-<input id="f-audio" type="file" accept="audio/*,video/*,.mid,.midi,.json,.lathe" multiple hidden>
+<input id="f-video" type="file" accept="video/*,.mp4,.mov,.m4v,.mkv,.webm,.ogv,.ts,.mts,.m2ts,.3gp" hidden>
+<input id="f-audio" type="file" accept="audio/*,video/*,.wav,.wave,.mp3,.ogg,.oga,.opus,.flac,.m4a,.aac,.weba,.webm,.aif,.aiff,.aifc,.caf,.mid,.midi,.kar,.json,.lathe,.mp4,.mov,.m4v,.mkv,.ogv,.ts,.mts,.3gp" multiple hidden>
 
 <script src="js/util.js"></script>
 <script src="js/state.js"></script>
@@ -167,6 +161,7 @@
 <script src="js/guide.js"></script>
 <script src="js/video.js"></script>
 <script src="js/files.js"></script>
+<script src="js/export.js"></script>
 <script src="js/main.js"></script>
 <script src="js/feedback.js"></script>
 <script src="js/tutorial.js"></script>

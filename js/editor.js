@@ -37,7 +37,7 @@ L.ed = (() => {
       </div><div class="ed-wave"><canvas></canvas></div>`;
     const cv = host.querySelector('canvas'), box = cv.parentElement;
     cv.width = Math.max(200, box.clientWidth); cv.height = Math.max(60, box.clientHeight);
-    L.drawWave(cv, buf, c.offset, c.offset + cl(c) * spb, '#d8d3c7');
+    L.drawWave(cv, buf, c.offset, c.offset + cl(c) * spb, getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() || '#d8d3c7');
     host.querySelector('.ed-name').onchange = e => { c.name = e.target.value || 'Clip'; L.commit(); };
     const gain = host.querySelector('.ed-gain');
     gain.oninput = () => { c.gain = +gain.value; gain.nextElementSibling.textContent = L.db(c.gain) + ' dB'; };
@@ -79,8 +79,8 @@ L.ed = (() => {
     for (let i = 0; i < per; i++) {
       // rows repeat every octave from C downward; with a style in use they are shaded by scale instead of by key colour
       const pc = (12 - i) % 12, dark = drums ? i % 2 : [2, 4, 6, 9, 11].includes(i);
-      const col = gs && !drums ? (pc === gs.key ? '#3d2c25' : gs.pcs.has(pc) ? '#2c2a26' : '#171615') : dark ? '#1c1b19' : '#272522';
-      const line = !drums && i === 0 ? '#4a4640' : '#1c1b19';
+      const col = gs && !drums ? (pc === gs.key ? 'color-mix(in srgb, var(--sig) 24%, var(--ink-2))' : gs.pcs.has(pc) ? 'var(--ink-3)' : 'color-mix(in srgb, var(--ink) 75%, black)') : dark ? 'var(--ink)' : 'var(--ink-2)';
+      const line = !drums && i === 0 ? 'var(--ink-4)' : 'var(--ink)';
       stops.push(`${col} ${i * g.rh}px ${(i + 1) * g.rh - 1}px`, `${line} ${(i + 1) * g.rh - 1}px ${(i + 1) * g.rh}px`);
     }
     grid.style.setProperty('--rows', `linear-gradient(to bottom, ${stops.join(',')})`);

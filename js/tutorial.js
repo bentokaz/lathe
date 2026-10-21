@@ -67,7 +67,7 @@ L.tour = (() => {
       body: 'Open <b>File</b> and choose <b>Add video to score</b> (or drop a video file on the timeline) and the film appears top right with a thumbnail strip above the tracks. It follows the playhead, the flag button drops markers on moments you want to hit, and <b>File, Export video with music</b> saves the result. No video to hand? Press <b>Skip</b>.',
       done: () => !!L.project.video },
     { title: 'That is the whole loop', target: '#m-file',
-      body: 'Pick a style, write clips, arrange, mix, then <b>File, Export WAV</b>. Your work autosaves in this browser; <b>File, Save</b> writes a project file you can keep. <b>R</b> records what you play. The gear menu lists every shortcut and replays this tutorial.',
+      body: 'Pick a style, write clips, arrange, mix, then <b>File, Export</b> (audio, MIDI or video). Your work autosaves in this browser; <b>File, Save</b> writes a project file you can keep. <b>R</b> records what you play. The gear menu lists every shortcut and replays this tutorial.',
       last: true },
   ];
 

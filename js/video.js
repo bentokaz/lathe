@@ -61,7 +61,25 @@ L.video = (() => {
     const my = token;
     await new Promise(r => { if (el.readyState >= 1) r(); else { el.addEventListener('loadedmetadata', r, { once: true }); el.addEventListener('error', r, { once: true }); } });
     if (my !== token) return;
-    if (!el.duration || !isFinite(el.duration)) { detach(); file = null; render(); return L.toast('This browser cannot play that video file', 6000); }
+    if (!el.duration || !isFinite(el.duration)) {
+      detach(); file = null; render();
+      // the browser cannot play it directly (MKV, some MOV/MPEG-TS): convert it to MP4 once and use that
+      if (!f.converted) {
+        try {
+          L.toast('Converting ' + f.name + ' so the browser can play it…', 0);
+          const M = await L.exporter.lib();
+          const input = new M.Input({ source: new M.BlobSource(f), formats: M.ALL_FORMATS });
+          const output = new M.Output({ format: new M.Mp4OutputFormat({ fastStart: 'in-memory' }), target: new M.BufferTarget() });
+          const conv = await M.Conversion.init({ input, output });
+          conv.onProgress = pr => L.toast(`Converting ${f.name}… ${Math.round(pr * 100)}%`, 0);
+          await conv.execute();
+          const mp4 = new File([output.target.buffer], f.name.replace(/\.[^.]+$/, '') + '.mp4', { type: 'video/mp4' });
+          mp4.converted = true;
+          return add(mp4);
+        } catch (err) { return L.toast('This browser cannot play or convert that video file (' + err.message + ')', 8000); }
+      }
+      return L.toast('This browser cannot play that video file', 6000);
+    }
     const old = meta();
     L.project.video = { name: f.name, dur: el.duration, offset: old ? old.offset : 0, vol: old ? old.vol : 0.7, markers: old && old.name === f.name ? old.markers : [] };
     L.commit();
@@ -216,8 +234,7 @@ L.video = (() => {
 
   $('#b-video').onclick = () => $('#f-video').click();
   $('#f-video').onchange = e => { const f = e.target.files[0]; e.target.value = ''; add(f); };
-  $('#b-exportv').onclick = exportVideo;
   L.on('change', sync);
 
-  return { add, restore, lane, tick, exportVideo, has: () => !!meta() };
+  return { add, restore, lane, tick, exportVideo, has: () => !!meta(), file: () => file };
 })();

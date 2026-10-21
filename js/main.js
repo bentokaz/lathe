@@ -52,10 +52,20 @@
   $('#b-undo').onclick = L.undo;
   $('#b-redo').onclick = L.redo;
   $('#b-help').onclick = () => $('#help').showModal();
-  const THEMES = ['paper', 'slate', 'cassette', 'night'];
+  // name, panel colour, well colour, accent, dark panels?
+  const THEMES = [
+    ['paper', 'Paper', '#d8d3c7', '#1c1b19', '#e4572e'], ['slate', 'Slate', '#ced3d7', '#161a1e', '#e3a326'], ['cassette', 'Cassette', '#dccaa8', '#231a10', '#cf4a2a'],
+    ['sky', 'Sky', '#cfe0f2', '#0d1b2e', '#ff5a36'], ['mint', 'Mint', '#d3eadb', '#0c2117', '#ff4f6e'], ['blush', 'Blush', '#f4d6dd', '#2a0f17', '#0e9384'],
+    ['lilac', 'Lilac', '#e1d5f2', '#170d2a', '#ff8c1a'], ['butter', 'Butter', '#f3e3a1', '#221b06', '#d7262d'],
+    ['night', 'Night', '#262523', '#121211', '#e4572e', 1], ['crimson', 'Crimson', '#5c1722', '#1a0609', '#ffb52e', 1], ['plum', 'Plum', '#3d2357', '#12081d', '#3ee0b8', 1],
+    ['ocean', 'Ocean', '#123b5e', '#06121f', '#ffc933', 1], ['forest', 'Forest', '#1f4430', '#07130b', '#ff8f2b', 1], ['neon', 'Neon', '#2a1046', '#0c0516', '#ff3d9a', 1],
+  ];
+  $('#themes').innerHTML = THEMES.map(([id, name, a, b, c]) => `<button data-theme-pick="${id}" title="${name}" style="--ta:${a};--tb:${b};--tc:${c}"><i></i><span>${name}</span></button>`).join('');
   const setTheme = name => {
-    if (!THEMES.includes(name)) name = 'paper';
+    const th = THEMES.find(t => t[0] === name) || THEMES[0];
+    name = th[0];
     document.documentElement.dataset.theme = name;
+    if (th[5]) document.documentElement.dataset.dark = ''; else delete document.documentElement.dataset.dark;
     $$('[data-theme-pick]').forEach(b => b.classList.toggle('cur', b.dataset.themePick === name));
     try { localStorage.setItem('lathe.theme', name); } catch { /* storage blocked */ }
   };
@@ -91,13 +101,6 @@
   $('#b-new').onclick = () => {
     if (!confirm('Start a new project? The current one is replaced. Save it first if you want to keep it.')) return;
     E.stop(); L.setProject(L.newProject());
-  };
-  $('#b-export').onclick = async () => {
-    try {
-      L.toast('Rendering…', 0);
-      L.download(await E.render(), fileName() + '.wav');
-      L.toast('Exported ' + fileName() + '.wav');
-    } catch (err) { L.toast('Export failed: ' + err.message, 6000); }
   };
 
   // ---------- keyboard ----------

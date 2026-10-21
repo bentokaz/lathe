@@ -154,6 +154,43 @@ L.files = (() => {
     } catch (err) { L.toast('Could not read that MIDI file: ' + err.message, 7000); }
   }
 
+  // ---------- audio in: whatever the browser decodes, plus AIFF, plus anything Mediabunny can unpack ----------
+  function parseAiff(ab) {
+    const d = new DataView(ab), tag = o => String.fromCharCode(d.getUint8(o), d.getUint8(o + 1), d.getUint8(o + 2), d.getUint8(o + 3));
+    if (tag(0) !== 'FORM' || !/AIF[FC]/.test(tag(8))) return null;
+    let p = 12, ch = 0, frames = 0, bits = 16, rate = 44100, little = false, data = -1;
+    while (p + 8 <= d.byteLength) {
+      const id = tag(p), len = d.getUint32(p + 4);
+      if (id === 'COMM') {
+        ch = d.getUint16(p + 8); frames = d.getUint32(p + 10); bits = d.getUint16(p + 14);
+        const e = d.getUint16(p + 16) & 0x7fff, hi = d.getUint32(p + 18), lo = d.getUint32(p + 22);
+        rate = (hi * 2 ** 32 + lo) * 2 ** (e - 16383 - 63);
+        if (tag(8) === 'AIFC') { const comp = tag(p + 26); if (comp === 'sowt') little = true; else if (comp !== 'NONE') throw new Error('compressed AIFF is not supported'); }
+      } else if (id === 'SSND') data = p + 16 + d.getUint32(p + 8);
+      p += 8 + len + (len & 1);
+    }
+    if (!ch || data < 0) return null;
+    const bps = bits / 8, buf = new AudioBuffer({ length: frames, numberOfChannels: ch, sampleRate: Math.round(rate) });
+    const rd = { 1: o => d.getInt8(o) / 128, 2: o => d.getInt16(o, little) / 32768, 3: o => ((little ? d.getUint8(o) | d.getUint8(o + 1) << 8 | d.getInt8(o + 2) << 16 : d.getInt8(o) << 16 | d.getUint8(o + 1) << 8 | d.getUint8(o + 2)) / 8388608), 4: o => d.getInt32(o, little) / 2147483648 }[bps];
+    for (let c = 0; c < ch; c++) { const out = buf.getChannelData(c); for (let i = 0; i < frames; i++) out[i] = rd(data + (i * ch + c) * bps); }
+    return buf;
+  }
+  async function decodeAudioFile(f) {
+    const ab = await f.arrayBuffer();
+    if (/\.aif[fc]?$/i.test(f.name)) { const b = parseAiff(ab); if (b) return b; }
+    try { return await E.decode(ab.slice(0)); } catch (first) {
+      const M = await L.exporter.lib();
+      const input = new M.Input({ source: new M.BlobSource(f), formats: M.ALL_FORMATS });
+      const at = await input.getPrimaryAudioTrack();
+      if (!at) throw first;
+      const parts = []; for await (const { buffer } of new M.AudioBufferSink(at).buffers()) parts.push(buffer);
+      if (!parts.length) throw first;
+      const all = new AudioBuffer({ length: parts.reduce((n, b) => n + b.length, 0), numberOfChannels: parts[0].numberOfChannels, sampleRate: parts[0].sampleRate });
+      let o = 0; for (const b of parts) { for (let c = 0; c < all.numberOfChannels; c++) all.copyToChannel(b.getChannelData(Math.min(c, b.numberOfChannels - 1)), c, o); o += b.length; }
+      return all;
+    }
+  }
+
   // ---------- song links ----------
   // The whole song (without recorded audio or video) is compressed into the part of the link after #,
   // which never leaves the browser; whoever opens it gets their own copy to change.
@@ -180,8 +217,6 @@ L.files = (() => {
     } catch { L.toast('That song link is damaged or incomplete', 7000); return null; }
   }
 
-  $('#b-mp3').onclick = exportMp3;
-  $('#b-midi').onclick = exportMidi;
   $('#b-share').onclick = shareLink;
-  return { exportMp3, exportMidi, importMidi, parseMidi, shareLink, openFromLink, notesOf };
+  return { exportMp3, exportMidi, importMidi, parseMidi, shareLink, openFromLink, notesOf, decodeAudioFile };
 })();

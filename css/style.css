@@ -115,7 +115,7 @@ input[type=range]::-moz-range-thumb { width: 7px; height: 15px; background: var(
 .lane { flex: 1; position: relative; border-bottom: 1px solid var(--ink-3); background-color: var(--ink);
   background-image: linear-gradient(to right, var(--ink-4) 1px, transparent 1px), linear-gradient(to right, var(--bl) 1px, transparent 1px), linear-gradient(to right, transparent 50%, rgba(216, 211, 199, .03) 50%);
   background-size: calc(var(--ppb) * 4) 100%, var(--ppb) 100%, calc(var(--ppb) * 32) 100%; }
-.trow.sel .lane { background-color: #211f1d; }
+.trow.sel .lane { background-color: color-mix(in srgb, var(--ink) 88%, var(--paper)); }
 .clip { position: absolute; top: 4px; bottom: 4px; background: var(--c); color: var(--ink); border-radius: 2px; overflow: hidden; cursor: grab; touch-action: none; }
 .clip.sel { background: var(--sig); }
 .clip span { position: absolute; left: 6px; top: 2px; right: 6px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; font-stretch: 78%; pointer-events: none; }
@@ -204,9 +204,9 @@ input[type=range]::-moz-range-thumb { width: 7px; height: 15px; background: var(
 .key:hover, .key:active { background: var(--sig); }
 .key.drum { height: 30px; text-align: left; padding: 8px 0 0 8px; font: 600 11px var(--f); letter-spacing: .06em; text-transform: uppercase; color: var(--ink); border-bottom-color: var(--rule); }
 .ed-grid { flex: 1; position: relative; cursor: crosshair; touch-action: none;
-  background-image: linear-gradient(to right, #5a554d 1px, transparent 1px), linear-gradient(to right, #3d3a35 1px, transparent 1px), linear-gradient(to right, rgba(74, 70, 64, .45) 1px, transparent 1px), var(--rows);
+  background-image: linear-gradient(to right, color-mix(in srgb, var(--paper) 30%, var(--ink)) 1px, transparent 1px), linear-gradient(to right, color-mix(in srgb, var(--paper) 17%, var(--ink)) 1px, transparent 1px), linear-gradient(to right, color-mix(in srgb, var(--paper) 9%, var(--ink)) 1px, transparent 1px), var(--rows);
   background-size: calc(var(--eppb) * 4) 100%, var(--eppb) 100%, var(--sn) 100%, 100% var(--rp); }
-.ed-out { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, rgba(28, 27, 25, .82) 0 6px, rgba(52, 49, 45, .82) 6px 7px); pointer-events: none; }
+.ed-out { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 82%, transparent) 0 6px, color-mix(in srgb, var(--ink-3) 82%, transparent) 6px 7px); pointer-events: none; }
 .note { position: absolute; background: var(--paper); opacity: var(--v); border-radius: 1px; cursor: grab; box-shadow: inset 0 0 0 1px var(--ink); }
 .note.sel { background: var(--sig); opacity: 1; }
 .note i { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; max-width: 40%; cursor: ew-resize; }
@@ -391,7 +391,7 @@ button.ib { width: 28px; height: 26px; padding: 0; display: inline-grid; place-i
 #vid-row { height: 56px; }
 .vhead { grid-template-rows: 1fr !important; }
 .vhead .t-no .ic { margin: 0 auto; width: 17px; height: 17px; }
-.vlane { background-image: none; background-color: #141312; overflow: hidden; }
+.vlane { background-image: none; background-color: var(--ink); overflow: hidden; }
 .vclip { position: absolute; top: 4px; bottom: 4px; background: var(--ink-3); border-radius: 2px; cursor: grab; touch-action: none; }
 .vclip img { position: absolute; top: 0; height: 100%; pointer-events: none; }
 .mk { position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -1px; border-left: 2px solid var(--sig); cursor: pointer; z-index: 1; }
@@ -496,10 +496,50 @@ svg.auto text { fill: var(--paper-3); font: 11px var(--f); pointer-events: none;
 /* Slate and Cassette recolour everything; Night darkens the panels while the wells get darker still. */
 :root[data-theme="slate"] { --paper: #ced3d7; --paper-2: #c1c7cc; --paper-3: #b0b7bd; --rule: #8a939b; --ink: #161a1e; --ink-2: #1f252a; --ink-3: #2c333a; --ink-4: #3f4851; --dim: #5b656e; --sig: #e3a326; }
 :root[data-theme="cassette"] { --paper: #dccaa8; --paper-2: #d0bc97; --paper-3: #c2ad86; --rule: #9c8865; --ink: #231a10; --ink-2: #2e2317; --ink-3: #3d3020; --ink-4: #544330; --dim: #6f5c43; --sig: #cf4a2a; }
-:root[data-theme="night"] { --ink: #121211; --ink-2: #1a1918; --ink-3: #272522; --ink-4: #3a3733; --rule: #6e695f; }
-:root[data-theme="night"] body { background: #262523; }
-:root[data-theme="night"] :is(#top, #side, .thead, #corner, .ed-bar, .ed-empty, .ed-corner, .ed-vlab, .kb-bar, .ch-row, #guide, #sounds, #mixer, dialog, #tour) {
-  --paper: #262523; --paper-2: #2e2d2a; --paper-3: #3b3935; --rule: #57534c; --ink: #e7e1d5; --ink-2: #d2ccc0; --ink-3: #bab3a6; --ink-4: #a39c8f; --dim: #8f897e;
+/* Light themes recolour the panels (paper), the dark wells (ink), the accent (sig) and the clip blocks.
+   Dark themes keep light clips and keys, but flip the panels: each defines its panel colours as --cp-*. */
+:root { --clip-1: #d8d3c7; --clip-2: #b9b3a5; --clip-3: #cdc2a8; --clip-4: #a09a8d; }
+:root[data-theme="slate"] { --clip-1: #dfe3e6; --clip-2: #c3cacf; --clip-3: #e9dcc0; --clip-4: #aab3ba; }
+:root[data-theme="cassette"] { --clip-1: #eadcc0; --clip-2: #d6c39f; --clip-3: #e7c7b6; --clip-4: #c2ad86; }
+:root[data-theme="sky"] { --paper: #cfe0f2; --paper-2: #bfd3ea; --paper-3: #aac3df; --rule: #7f9bbb; --ink: #0d1b2e; --ink-2: #142740; --ink-3: #1e3655; --ink-4: #2f4c70; --dim: #4d6687; --sig: #ff5a36; --clip-1: #e3eefa; --clip-2: #c8dcf3; --clip-3: #f7d9c9; --clip-4: #b4cce8; }
+:root[data-theme="mint"] { --paper: #d3eadb; --paper-2: #c2dfcc; --paper-3: #acd2b9; --rule: #7fae90; --ink: #0c2117; --ink-2: #12301f; --ink-3: #1b442c; --ink-4: #2b5e40; --dim: #4b7a5d; --sig: #ff4f6e; --clip-1: #e6f4ea; --clip-2: #cde7d5; --clip-3: #f6dccf; --clip-4: #b7dac3; }
+:root[data-theme="blush"] { --paper: #f4d6dd; --paper-2: #edc5cf; --paper-3: #e3b0bd; --rule: #bd8794; --ink: #2a0f17; --ink-2: #3a1520; --ink-3: #4f1d2c; --ink-4: #6b2a3d; --dim: #8c4f60; --sig: #0e9384; --clip-1: #fbe6eb; --clip-2: #f1cdd6; --clip-3: #d9ece9; --clip-4: #e8bac6; }
+:root[data-theme="lilac"] { --paper: #e1d5f2; --paper-2: #d4c4ec; --paper-3: #c3afe3; --rule: #9a86bd; --ink: #170d2a; --ink-2: #21143a; --ink-3: #2f1d50; --ink-4: #44306c; --dim: #67558a; --sig: #ff8c1a; --clip-1: #efe7fa; --clip-2: #dccdf2; --clip-3: #fbe0c8; --clip-4: #cbb8ea; }
+:root[data-theme="butter"] { --paper: #f3e3a1; --paper-2: #ecd687; --paper-3: #e2c76c; --rule: #b9a14c; --ink: #221b06; --ink-2: #2f260b; --ink-3: #413512; --ink-4: #5a4a1d; --dim: #7a6630; --sig: #d7262d; --clip-1: #faf0c8; --clip-2: #f1e1a3; --clip-3: #f6cfc3; --clip-4: #e4cf86; }
+
+:root[data-theme="night"] { --ink: #121211; --ink-2: #1a1918; --ink-3: #272522; --ink-4: #3a3733; --rule: #6e695f;
+  --cp-paper: #262523; --cp-paper-2: #2e2d2a; --cp-paper-3: #3b3935; --cp-rule: #57534c; --cp-text: #e7e1d5; --cp-text-2: #d2ccc0; --cp-text-3: #a39c8f; --cp-dim: #8f897e; }
+:root[data-theme="crimson"] { --ink: #1a0609; --ink-2: #24090e; --ink-3: #351018; --ink-4: #4f1a25; --rule: #c98f96; --sig: #ffb52e; --clip-1: #f6d5d5; --clip-2: #eab9bb; --clip-3: #f9e1c2; --clip-4: #dca2a7;
+  --cp-paper: #5c1722; --cp-paper-2: #6a1d2a; --cp-paper-3: #7d2635; --cp-rule: #a24a59; --cp-text: #f8e3e3; --cp-text-2: #eccfd0; --cp-text-3: #dcb4b7; --cp-dim: #d39aa1; }
+:root[data-theme="plum"] { --ink: #12081d; --ink-2: #1b0d2b; --ink-3: #2a1642; --ink-4: #3f235f; --rule: #a58cc6; --sig: #3ee0b8; --clip-1: #e9dcf7; --clip-2: #d6c1ef; --clip-3: #c7f1e5; --clip-4: #c3a9e6;
+  --cp-paper: #3d2357; --cp-paper-2: #482a66; --cp-paper-3: #573479; --cp-rule: #7d5ba3; --cp-text: #f1e6fb; --cp-text-2: #e1d2f0; --cp-text-3: #cbb8e0; --cp-dim: #b79fd3; }
+:root[data-theme="ocean"] { --ink: #06121f; --ink-2: #0a1a2c; --ink-3: #12293f; --ink-4: #1d3d5b; --rule: #7fa6c9; --sig: #ffc933; --clip-1: #d9eaf8; --clip-2: #bcd7f0; --clip-3: #f9e7b9; --clip-4: #a8c9ea;
+  --cp-paper: #123b5e; --cp-paper-2: #17476f; --cp-paper-3: #1e5683; --cp-rule: #3f78a5; --cp-text: #e0eefa; --cp-text-2: #cde1f3; --cp-text-3: #b3cfe8; --cp-dim: #93b6d6; }
+:root[data-theme="forest"] { --ink: #07130b; --ink-2: #0b1c11; --ink-3: #12291a; --ink-4: #1d3d28; --rule: #7fb593; --sig: #ff8f2b; --clip-1: #dcf0e2; --clip-2: #c0e2cb; --clip-3: #fbdcc0; --clip-4: #a9d6b8;
+  --cp-paper: #1f4430; --cp-paper-2: #255139; --cp-paper-3: #2e6146; --cp-rule: #4f8a68; --cp-text: #e2f1e6; --cp-text-2: #cfe5d6; --cp-text-3: #b5d5bf; --cp-dim: #95c2a5; }
+:root[data-theme="neon"] { --ink: #0c0516; --ink-2: #140823; --ink-3: #210e38; --ink-4: #351657; --rule: #a77fd0; --sig: #ff3d9a; --clip-1: #f2dcff; --clip-2: #e2c0fb; --clip-3: #c6f6ff; --clip-4: #d4a9f5;
+  --cp-paper: #2a1046; --cp-paper-2: #351555; --cp-paper-3: #431b69; --cp-rule: #6b3a99; --cp-text: #f6e8ff; --cp-text-2: #e8d3fb; --cp-text-3: #d4b8f1; --cp-dim: #c09ae6; }
+:root[data-dark] body { background: var(--cp-paper); }
+:root[data-dark] :is(#top, #side, .thead, #corner, .ed-bar, .ed-empty, .ed-corner, .ed-vlab, .kb-bar, .ch-row, #guide, #sounds, #mixer, dialog, #tour) {
+  --paper: var(--cp-paper); --paper-2: var(--cp-paper-2); --paper-3: var(--cp-paper-3); --rule: var(--cp-rule);
+  --ink: var(--cp-text); --ink-2: var(--cp-text-2); --ink-3: var(--cp-text-3); --ink-4: var(--cp-text-3); --dim: var(--cp-dim);
   color: var(--ink);
 }
-:root[data-theme="night"] .trow.sel .lane { background-color: #0d0d0c; }
+
+/* ---------- theme swatches ---------- */
+#themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px 8px 8px; }
+#file #themes button { flex-direction: column; align-items: stretch; gap: 3px; padding: 4px; border: 1px solid transparent; border-radius: 2px; font-size: 10.5px; text-align: center; }
+#file #themes button + button { border-top: 1px solid transparent; }
+#themes button i { display: block; height: 20px; border-radius: 1px; background: linear-gradient(to right, var(--ta) 0 55%, var(--tb) 55% 85%, var(--tc) 85%); border: 1px solid var(--rule); }
+#file #themes button.cur { border-color: var(--ink); }
+#file #themes button.cur::after { display: none; }
+
+/* ---------- export dialog ---------- */
+#exp { width: min(560px, 94vw); }
+.ex-row { grid-template-columns: 70px 1fr !important; height: 32px; }
+.ex-row select { font-size: 14px; }
+.ex-status { min-height: 20px; font-size: 13px !important; position: relative; }
+.ex-status i { display: block; height: 3px; background: linear-gradient(to right, var(--sig) var(--f), var(--paper-3) var(--f)); margin-bottom: 6px; }
+.ex-status button { padding: 3px 8px; }
+.fb-kinds button[disabled] { opacity: .4; cursor: not-allowed; }
+#file #themes button i { width: auto; height: 20px; margin: 0; background: linear-gradient(to right, var(--ta) 0 55%, var(--tb) 55% 85%, var(--tc) 85%); }

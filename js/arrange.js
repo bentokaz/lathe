@@ -3,7 +3,6 @@ L.arr = (() => {
   const { $, esc, clamp, pad } = L;
   const root = $('#arr'), inner = $('#arr-inner'), rows = $('#arr-rows'), ruler = $('#ruler');
   const HW = 236, TH = 68, RH = 34;
-  const SHADES = ['#d8d3c7', '#b9b3a5', '#cdc2a8', '#a09a8d'];
   let clipboard = null;
 
   const snap = (b, ev) => (ev && ev.shiftKey) || !L.view.snap ? b : Math.round(b / L.view.snap) * L.view.snap;
@@ -31,7 +30,7 @@ L.arr = (() => {
           <input class="t-vol" type="range" min="0" max="1" step="0.005" value="${t.vol}" title="Volume">
           <div class="t-meter" data-meter="${t.id}" data-dir="x"><i></i></div>
         </div>
-        <div class="lane">${t.clips.map(c => `<div class="clip${c.id === L.sel.clip ? ' sel' : ''}${c.loop ? ' looped' : ''}" data-clip="${c.id}" style="left:${c.start * ppb}px;width:${Math.max(4, c.len * ppb - 1)}px;--c:${SHADES[i % SHADES.length]};--rep:${(c.loop || c.len) * ppb}px"><span>${esc(c.name)}</span><canvas></canvas><i class="c-l"></i><i class="c-r" title="Drag to change the length (adds empty space)"></i><i class="c-loop" title="Drag to repeat this clip">${L.icon('loop')}</i></div>`).join('')}${t.showAuto ? `<svg class="auto" width="${tot * ppb}" height="${TH - 1}">${autoSvg(t, tot * ppb)}</svg>` : ''}</div>
+        <div class="lane">${t.clips.map(c => `<div class="clip${c.id === L.sel.clip ? ' sel' : ''}${c.loop ? ' looped' : ''}" data-clip="${c.id}" style="left:${c.start * ppb}px;width:${Math.max(4, c.len * ppb - 1)}px;--c:var(--clip-${i % 4 + 1});--rep:${(c.loop || c.len) * ppb}px"><span>${esc(c.name)}</span><canvas></canvas><i class="c-l"></i><i class="c-r" title="Drag to change the length (adds empty space)"></i><i class="c-loop" title="Drag to repeat this clip">${L.icon('loop')}</i></div>`).join('')}${t.showAuto ? `<svg class="auto" width="${tot * ppb}" height="${TH - 1}">${autoSvg(t, tot * ppb)}</svg>` : ''}</div>
       </div>`).join('');
     drawClips();
     if (L.video) L.video.lane();
@@ -269,10 +268,11 @@ L.arr = (() => {
     for (const f of files) {
       if (/\.(json|lathe)$/i.test(f.name) || f.type === 'application/json') { await L.openProjectFile(f); return; }
       if (/\.midi?$/i.test(f.name) || /midi/.test(f.type)) { await L.files.importMidi(f); continue; }
-      if (!f.type.startsWith('audio/') && !/\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(f.name)) continue;
+      if (f.type.startsWith('video/') && !/\.webm$/i.test(f.name) || /\.(mp4|mov|m4v|mkv|ogv|avi|wmv|ts|mts|m2ts|3gp)$/i.test(f.name)) { L.video.add(f); continue; }
+      if (!f.type.startsWith('audio/') && !/\.(wav|wave|mp3|ogg|oga|opus|flac|m4a|aac|weba|webm|aif|aiff|aifc|caf|mp2|ac3|amr|wma)$/i.test(f.name)) continue;
       try {
         L.toast('Reading ' + f.name + '…', 0);
-        const buf = await L.engine.decode(await f.arrayBuffer());
+        const buf = await L.files.decodeAudioFile(f);
         const t = track && track.type === 'audio' ? track : (track = addTrack('audio'));
         const c = { id: L.uid(), name: f.name.replace(/\.[^.]+$/, ''), start: beat, len: buf.duration / L.spb(), buf: L.addBuffer(buf), offset: 0, gain: 1 };
         t.clips.push(c); L.sel.track = t.id; L.sel.clip = c.id; beat += c.len;
@@ -291,9 +291,7 @@ L.arr = (() => {
     e.preventDefault();
     const row = e.target.closest('.trow'), rect = root.getBoundingClientRect();
     const beat = Math.max(0, snap((e.clientX - rect.left - HW + root.scrollLeft) / L.view.ppb));
-    const files = [...e.dataTransfer.files], vid = files.find(f => f.type.startsWith('video/'));
-    if (vid) L.video.add(vid);
-    importFiles(files.filter(f => f !== vid), row && L.trackById(row.dataset.track), beat);
+    importFiles([...e.dataTransfer.files], row && L.trackById(row.dataset.track), beat);
   });
 
   // ---------- per-frame ----------
