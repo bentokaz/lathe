@@ -119,7 +119,7 @@ L.panels = (() => {
         <label class="s-pan"><span>Pan</span><input type="range" data-k="pan" min="-1" max="1" step="0.02" value="${t.pan}"></label>
         <div class="s-fad"><div class="vmeter" data-meter="${t.id}"><i></i></div><input class="fader" type="range" data-k="vol" min="0" max="1" step="0.005" value="${t.vol}"></div>
         <output>${L.db(L.gain(t.vol))}</output>
-        <div class="s-ms"><button data-act="mute" class="${t.mute ? 'on' : ''}">M</button><button data-act="solo" class="solo${t.solo ? ' on' : ''}">S</button></div>
+        <div class="s-ms">${L.switches(t)}</div>
       </div>`).join('') + `
       <div class="strip master" data-track="master">
         <div class="s-top"><span class="s-name">Master</span></div>

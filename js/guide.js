@@ -1,6 +1,7 @@
 'use strict';
 // Styles: pick a kind of music and Lathe sets the key and tempo, adds fitting instruments,
-// marks the notes and chords that belong, and can write a starter chord pattern.
+// marks the notes and chords that belong, plays a short preview, and can write a backing (chords, bass, drums)
+// that is generated fresh each time, so two songs in the same style do not share one.
 L.guide = (() => {
   const { $, esc } = L, E = L.engine, P = L.perf;
   const host = $('#guide');
@@ -86,6 +87,9 @@ L.guide = (() => {
     S('folk', 'Chill and pop', 'Campfire folk', 'Strummed guitar, a harmonica tune and three easy chords.', 0, 'Major', 92,
       ['pluck:Steel-string acoustic|Chords', 'gm:acoustic_bass|Bass', 'gm:harmonica|Melody', 'gm:banjo|Colour', 'gm:fiddle|Colour'], [[0, 3, 4, 0], [0, 5, 3, 4]]),
   ];
+  // Hand-ranked by how widely each kind of music is listened to; Lathe has no play counts to go on.
+  const RANK = 'pop trap lofi club boombap indie bedroom garage ballad neon dream uke folk soul chip heroic melancholy chase shoegaze trio tender battle wonder forest boss mystery room ice dunes water house bossa hold store weather'.split(' ');
+  STYLES.sort((a, b) => RANK.indexOf(a.id) - RANK.indexOf(b.id));
   const GENRES = [...new Set(STYLES.map(s => s.genre))];
   const byId = id => STYLES.find(s => s.id === id) || null;
   const active = () => byId(L.project.guide);
@@ -122,38 +126,182 @@ L.guide = (() => {
     L.toast(`${s.name}: ${NOTE[s.key]} ${s.scale.toLowerCase()}, ${s.bpm} BPM, ${s.inst.length} instruments ready`, 5000);
   }
 
-  // Writes one progression as held chords (plus a root-note bass line and a plain beat where the style has them).
-  function write(pi) {
-    const s = active(); if (!s) return;
-    const prog = s.prog[pi], sc = P.SCALES[s.scale], len = prog.length * 4;
-    const chords = addInst(s.inst.find(i => i.role === 'Chords').k);
-    // after whatever that track already has, and never before the playhead
-    const start = Math.max(Math.floor(L.pos / 4) * 4, Math.ceil(Math.max(0, ...chords.clips.map(c => c.start + c.len)) / 4) * 4);
+  // ---------- backing generator ----------
+  // A style's feel names a drum groove, ways to play the chords and the bass, and how much swing.
+  // A random seed chooses among them and varies the details bar by bar.
+  const rng = seed => () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const newSeed = () => Math.random() * 2 ** 32 >>> 0;
+  const any = (R, a) => a[Math.floor(R() * a.length)];
+
+  // 16 steps a bar per drum: x always, o sometimes, g a soft ghost note sometimes. [pitch, level, pattern choices]
+  const GROOVES = {
+    back: [[36, 0.95, ['x.......x.......', 'x......xx.......', 'x.....x.x.......', 'x.......x.o..o..', 'x..o....x.x.....']], [37, 0.85, ['....x.......x...', '....x.......x..g', '....x..g....x...']], [39, 0.5, ['x.x.x.x.x.x.x.x.', 'xxxxxxxxxxxxxxxx', 'x.x.x.x.x.x.x.xo']]],
+    four: [[36, 1, ['x...x...x...x...']], [38, 0.8, ['....x.......x...', '....x.......x..o']], [39, 0.45, ['..x...x...x...x.', 'x.xxx.xxx.xxx.xx', 'xxxxxxxxxxxxxxxx']], [40, 0.4, ['..x...x...x...x.', '..............x.', '................']]],
+    half: [[36, 0.95, ['x.........o.....', 'x.....o...x.....', 'x.......o.......']], [37, 0.85, ['........x.......', '........x......g']], [39, 0.45, ['x...x...x...x...', 'x.x.x.x.x.x.x.x.']]],
+    boombap: [[36, 1, ['x.....x...x..o..', 'x..o..x.....x...', 'x.x...o...x.....', 'x......x..x.....']], [37, 0.9, ['....x.......x...', '....x..g....x...']], [39, 0.5, ['x.x.x.x.x.x.x.x.', 'x.x.x.x.x.xxx.x.']]],
+    trap: [[36, 1, ['x......x..x.....', 'x.....x.o.x.....', 'x.......x..x..o.']], [38, 0.9, ['........x.......']], [39, 0.45, ['x.x.x.x.x.x.x.x.', 'xxxxxxxxxxxxxxxx', 'x.x.xxx.x.x.xxxx']]],
+    bossa: [[36, 0.8, ['x..x..x.x..x..x.', 'x.....x.x.....x.']], [42, 0.6, ['x..x..x...x..x..', '..x..x..x..x..x.']], [39, 0.3, ['xxxxxxxxxxxxxxxx', 'x.x.x.x.x.x.x.x.']]],
+    swing: [[36, 0.55, ['x.......o.......', 'x...............']], [42, 0.45, ['....x.......x...']], [37, 0.3, ['......g.......g.', '..g.......g.....']], [39, 0.5, ['x...x.x.x...x.x.', 'x...x.x.x.x.x.x.']]],
+  };
+  // chord playing, per bar: [beat, length, level, which chord note (all of them when left out)]
+  const COMP = {
+    hold: () => [[0, 3.9, 1]],
+    halves: () => [[0, 1.9, 1], [2, 1.9, 0.85]],
+    pulse: () => [0, 1, 2, 3].map(b => [b, 0.85, b ? 0.8 : 1]),
+    eighths: () => [...Array(8)].map((_, i) => [i / 2, 0.45, i % 2 ? 0.7 : 0.95]),
+    offbeat: () => [0.5, 1.5, 2.5, 3.5].map(b => [b, 0.4, 0.85]),
+    stab: v => [[0, 1.5, 3], [0.5, 1.5, 2.75], [0, 0.75, 2, 2.75], [0, 2.5], [0.75, 2.75]][Math.floor(v * 5)].map(b => [b, 0.4, 0.9]),
+    bossa: v => [[0, 1.5, 2.5], [0, 0.75, 2, 3.5], [0.5, 1.5, 3]][Math.floor(v * 3)].map(b => [b, 0.6, 0.85]),
+    arp: v => [[0, 1, 2, 1, 0, 1, 2, 3], [0, 1, 2, 3, 2, 1, 0, 1], [0, 2, 1, 3, 0, 2, 1, 3], [3, 2, 1, 0, 3, 2, 1, 0]][Math.floor(v * 4)].map((k, i) => [i / 2, 0.9, i % 2 ? 0.7 : 0.85, k]),
+  };
+  // bass, per bar: [beat, length, level, r root | 3 third | 5 fifth | 8 octave | n leading into the next chord]
+  const BASS = {
+    hold: () => [[0, 3.8, 0.85, 'r']],
+    roots: () => [[0, 2.9, 0.85, 'r'], [3, 0.9, 0.7, 'r']],
+    eighths: () => [...Array(8)].map((_, i) => [i / 2, 0.42, i % 2 ? 0.7 : 0.85, 'r']),
+    rootfifth: () => [[0, 1.4, 0.85, 'r'], [1.5, 0.45, 0.6, 'r'], [2, 1.9, 0.8, '5']],
+    octave: () => [...Array(8)].map((_, i) => [i / 2, 0.4, i % 2 ? 0.7 : 0.9, i % 2 ? '8' : 'r']),
+    offbass: () => [0.5, 1.5, 2.5, 3.5].map(b => [b, 0.4, 0.85, 'r']),
+    synco: v => [[[0, 0.7], [0.75, 0.5], [2.5, 0.9], [3.5, 0.4]], [[0, 1.4], [1.5, 0.4], [2.75, 1]], [[0, 0.5], [0.75, 0.6], [1.5, 0.4], [3, 0.9]]][Math.floor(v * 3)].map(([b, l], i) => [b, l, i ? 0.7 : 0.9, i === 3 ? 'n' : 'r']),
+    walk: () => [[0, 0.9, 0.85, 'r'], [1, 0.9, 0.7, '3'], [2, 0.9, 0.75, '5'], [3, 0.9, 0.7, 'n']],
+    trap: v => [[[0, 1.4], [1.75, 0.5], [2.5, 1.4]], [[0, 2.5], [2.75, 1]], [[0, 0.7], [0.75, 0.7], [2, 1.9]]][Math.floor(v * 3)].map(([b, l]) => [b, l, 0.9, 'r']),
+  };
+  const BAND = { dr: 'back', ch: ['hold', 'halves'], bs: ['roots'] }, STILL = { ch: ['hold', 'arp', 'halves'], bs: ['hold', 'roots'] };
+  const FEEL = {
+    dream: { dr: 'half', ch: ['hold', 'arp'], bs: ['hold', 'roots'] }, bedroom: { dr: 'boombap', ch: ['halves', 'stab'], bs: ['roots', 'synco'], sw: 0.15 },
+    indie: { dr: 'back', ch: ['eighths', 'pulse'], bs: ['eighths', 'roots'] }, shoegaze: { dr: 'half', ch: ['hold', 'eighths'], bs: ['eighths', 'hold'] },
+    bossa: { dr: 'bossa', ch: ['bossa', 'offbeat'], bs: ['rootfifth'] }, hold: { dr: 'bossa', ch: ['halves', 'offbeat'], bs: ['rootfifth', 'walk'] },
+    store: { dr: 'back', ch: ['offbeat', 'pulse'], bs: ['rootfifth'] }, weather: { dr: 'swing', ch: ['stab', 'halves'], bs: ['walk', 'rootfifth'], sw: 0.25 },
+    garage: { dr: 'back', ch: ['eighths', 'pulse'], bs: ['eighths'] }, ballad: { dr: 'half', ch: ['hold', 'arp', 'halves'], bs: ['hold', 'roots'] },
+    boombap: { dr: 'boombap', ch: ['stab', 'hold'], bs: ['synco', 'roots'], sw: 0.25 }, trap: { dr: 'trap', ch: ['hold', 'arp'], bs: ['trap'] },
+    club: { dr: 'four', ch: ['offbeat', 'stab'], bs: ['octave', 'offbass'] }, trio: { dr: 'swing', ch: ['stab', 'halves'], bs: ['walk'], sw: 0.33 },
+    soul: { dr: 'half', ch: ['hold', 'halves'], bs: ['synco', 'roots'], sw: 0.2 }, heroic: { ch: ['eighths', 'pulse'], bs: ['eighths', 'roots'] },
+    battle: { ch: ['eighths'], bs: ['eighths'] }, dunes: { ch: ['hold', 'arp'], bs: ['roots'] }, chip: { dr: 'back', ch: ['arp', 'eighths'], bs: ['octave', 'eighths'] },
+    forest: { ch: ['eighths', 'pulse'], bs: ['rootfifth'] }, boss: { dr: 'back', ch: ['eighths'], bs: ['eighths'] }, chase: { dr: 'four', ch: ['stab', 'hold'], bs: ['eighths', 'octave'] },
+    lofi: { dr: 'boombap', ch: ['hold', 'halves'], bs: ['synco', 'roots'], sw: 0.3 }, pop: { dr: 'back', ch: ['eighths', 'pulse', 'halves'], bs: ['roots', 'eighths'] },
+    neon: { dr: 'back', ch: ['hold', 'pulse'], bs: ['eighths', 'octave'] }, uke: { dr: 'back', ch: ['eighths'], bs: ['rootfifth', 'roots'] }, folk: { ch: ['eighths', 'pulse'], bs: ['rootfifth'] },
+  };
+  const feelOf = s => FEEL[s.id] || (s.inst.some(i => i.role === 'Drums') ? BAND : STILL);
+  const vel = v => Math.round(L.clamp(v, 0.1, 1) * 100) / 100;
+
+  // Chords, bass and drums for a progression (one scale degree per bar).
+  function backing(s, prog, seed) {
+    const R = rng(seed), F = feelOf(s), sc = P.SCALES[s.scale], sw = F.sw || 0, bars = prog.length;
     const tone = (d, k) => s.key + sc[(d + k) % 7];
     const fold = (pc, lo) => lo + ((pc - lo) % 12 + 12) % 12;
-    const names = P.chordsFor(s.key, s.scale, 4, s.sev);
-    const clip = { id: L.uid(), name: prog.map(d => names[d].name).join(' '), start, len, notes: [] };
-    prog.forEach((d, i) => (s.sev ? [0, 2, 4, 6] : [0, 2, 4]).forEach(k => clip.notes.push({ p: fold(tone(d, k), 53), s: i * 4, l: 3.9, v: 0.62 })));
-    chords.clips.push(clip);
-    const bassSpec = s.inst.find(i => i.role === 'Bass');
-    if (bassSpec) addInst(bassSpec.k).clips.push({ id: L.uid(), name: 'Roots', start, len, notes: prog.flatMap((d, i) => [{ p: fold(tone(d, 0), 31), s: i * 4, l: 2.9, v: 0.8 }, { p: fold(tone(d, 0), 31), s: i * 4 + 3, l: 0.9, v: 0.65 }]) });
-    const drumSpec = s.inst.find(i => i.role === 'Drums');
-    if (drumSpec) {
-      const notes = [];
-      for (let b = 0; b < len; b += 4) {
-        [0, 2].forEach(x => notes.push({ p: 36, s: b + x, l: 0.25, v: 0.95 }));
-        [1, 3].forEach(x => notes.push({ p: 37, s: b + x, l: 0.25, v: 0.8 }));
-        for (let x = 0; x < 4; x += 0.5) notes.push({ p: 39, s: b + x, l: 0.25, v: x % 1 ? 0.4 : 0.6 });
+    const swing = b => b + (Math.abs(b % 1 - 0.5) < 1e-6 ? sw * 0.5 : 0);
+    // this take's choices: how the chords and bass are played, where the chords sit, how loose it is
+    const comp = any(R, F.ch), cv = R(), bass = any(R, F.bs), bv = R(), low = 52 + Math.floor(R() * 6), hum = 0.06 + R() * 0.06;
+    const chords = [], bline = [], drums = [];
+    prog.forEach((d, bar) => {
+      const ps = (s.sev ? [0, 2, 4, 6] : [0, 2, 4]).map(k => fold(tone(d, k), low)).sort((a, b) => a - b);
+      ps.push(ps[0] + 12);
+      for (const [b, l, v, k] of COMP[comp](cv)) {
+        const notes = k === undefined ? ps.slice(0, -1) : [ps[k % ps.length]];
+        notes.forEach(p => chords.push({ p, s: bar * 4 + swing(b), l, v: vel(0.62 * v + (R() - 0.5) * hum) }));
       }
-      addInst(drumSpec.k).clips.push({ id: L.uid(), name: 'Beat', start, len, notes });
+      const root = fold(tone(d, 0), 31), next = fold(tone(prog[(bar + 1) % bars], 0), 31);
+      const iv = { r: root, 3: fold(tone(d, 2), root), 5: fold(tone(d, 4), root), 8: root + 12, n: next + (R() < 0.5 ? -1 : 1) };
+      for (const [b, l, v, k] of BASS[bass](bv)) bline.push({ p: iv[k], s: bar * 4 + swing(b), l, v: vel(0.8 * v + (R() - 0.5) * hum) });
+    });
+    const G = F.dr && GROOVES[F.dr];
+    if (G) {
+      const mine = G.map(x => any(R, x[2])), busy = 0.25 + R() * 0.4;
+      for (let bar = 0; bar < bars; bar++) {
+        const fill = bars >= 4 && bar % 4 === 3 && R() < 0.75;
+        G.forEach(([p, v, pats], li) => {
+          const pat = R() < 0.15 ? any(R, pats) : mine[li]; // now and then a bar borrows another pattern
+          for (let i = 0; i < 16; i++) {
+            const c = pat[i];
+            if (c === '.' || (fill && i >= 12 && p !== 36) || (c === 'o' && R() > busy) || (c === 'g' && R() > 0.6)) continue;
+            drums.push({ p, s: bar * 4 + swing(i / 4), l: 0.25, v: vel(v * (c === 'g' ? 0.35 : i % 4 ? 0.8 : 1) + (R() - 0.5) * 0.1) });
+          }
+        });
+        if (fill) { const tom = R() < 0.4, dense = R() < 0.5; for (let i = 12; i < 16; i++) if (dense || i % 2 === 0) drums.push({ p: tom ? 41 : 37, s: bar * 4 + i / 4, l: 0.25, v: vel(0.45 + (i - 12) * 0.13) }); }
+        if (bar % 8 === 0 && R() < 0.5) drums.push({ p: 43, s: bar * 4, l: 0.5, v: 0.6 });
+      }
     }
+    return { chords, bass: bline, drums };
+  }
+
+  // A tune for previews only: chord notes on the strong beats, steps along the scale in between.
+  function tune(s, prog, seed) {
+    const R = rng(seed), sc = P.SCALES[s.scale], out = [];
+    const RHY = [[[0, 1], [1, 0.5], [1.5, 0.5], [2, 2]], [[0, 1.5], [1.5, 0.5], [2, 1], [3, 1]], [[0, 0.5], [0.5, 0.5], [1, 1], [2.5, 1.5]], [[0, 3]], [[0, 1], [2, 1], [3, 0.5], [3.5, 0.5]]];
+    const motif = [any(R, RHY), any(R, RHY)];
+    let step = 7 + Math.floor(R() * 3); // position on the scale, counted from the key note an octave below middle
+    const pitch = i => s.key + 60 + 12 * Math.floor(i / 7) - 12 + sc[((i % 7) + 7) % 7];
+    prog.forEach((d, bar) => {
+      for (const [b, l] of motif[bar % 2]) {
+        if (b % 2 === 0) {
+          const want = [0, 2, 4].map(k => (d + k) % 7);
+          let best = step, bd = 99;
+          for (let i = step - 4; i <= step + 4; i++) if (want.includes(((i % 7) + 7) % 7) && Math.abs(i - step) < bd) { best = i; bd = Math.abs(i - step); }
+          step = best;
+        } else step += R() < 0.5 ? -1 : 1;
+        step = L.clamp(step, 7, 16);
+        out.push({ p: pitch(step), s: bar * 4 + b, l: l * 0.92, v: vel(0.7 + R() * 0.15) });
+      }
+    });
+    return out;
+  }
+
+  // Writes one progression's backing at the playhead (after whatever the chord track already has).
+  // Its seed is kept so New variation can swap it for a different take in the same place.
+  function write(pi, seed = newSeed(), at = null) {
+    const s = active(); if (!s) return;
+    const prog = s.prog[pi], len = prog.length * 4, b = backing(s, prog, seed), id = L.uid();
+    const chords = addInst(s.inst.find(i => i.role === 'Chords').k);
+    const start = at ?? Math.max(Math.floor(L.pos / 4) * 4, Math.ceil(Math.max(0, ...chords.clips.map(c => c.start + c.len)) / 4) * 4);
+    const names = P.chordsFor(s.key, s.scale, 4, s.sev);
+    chords.clips.push({ id: L.uid(), gen: id, name: prog.map(d => names[d].name).join(' '), start, len, notes: b.chords });
+    const bassSpec = s.inst.find(i => i.role === 'Bass');
+    if (bassSpec) addInst(bassSpec.k).clips.push({ id: L.uid(), gen: id, name: 'Bass', start, len, notes: b.bass });
+    const drumSpec = s.inst.find(i => i.role === 'Drums');
+    if (drumSpec && b.drums.length) addInst(drumSpec.k).clips.push({ id: L.uid(), gen: id, name: 'Beat', start, len, notes: b.drums });
+    L.project.gen = { id, pi, seed, start, style: s.id };
     L.sel.clip = null;
     L.commit();
-    L.toast(`Written at bar ${start / 4 + 1}. Now play a melody over it using the marked keys`, 5000);
+    L.toast(at === null ? `Backing written at bar ${start / 4 + 1}. Not quite right? Press New variation. Then play a tune over it on the marked keys` : 'New variation written', 6000);
+  }
+  // Swaps the backing written last for a fresh take in the same place.
+  function reroll() {
+    const g = L.project.gen; if (!g) return;
+    L.project.tracks.forEach(t => { t.clips = t.clips.filter(c => c.gen !== g.id); });
+    write(g.pi, newSeed(), g.start);
+  }
+
+  // ---------- previews ----------
+  // Eight bars (both progressions) with a made-up tune, played on a throwaway project.
+  let playing = null, loading = false;
+  function demo(s) {
+    const prog = [...s.prog[0], ...s.prog[1]], seed = newSeed(), b = backing(s, prog, seed);
+    const proj = { bpm: s.bpm, master: { vol: 0.8 }, loop: { on: false, start: 0, end: 0 }, tracks: [] };
+    const add = (role, notes, vol) => {
+      const spec = s.inst.find(i => i.role === role), it = spec && L.lib.byKey(spec.k);
+      if (!it || !notes.length) return;
+      const t = L.newTrack(it.kind === 'kit' ? 'drums' : 'synth');
+      L.lib.apply(t, it); t.vol = vol;
+      t.clips.push({ id: L.uid(), start: 0, len: prog.length * 4, notes });
+      proj.tracks.push(t);
+    };
+    add('Chords', b.chords, 0.62); add('Bass', b.bass, 0.74); add('Drums', b.drums, 0.7); add('Melody', tune(s, prog, seed ^ 0x5bd1e995), 0.74);
+    return proj;
+  }
+  function preview(id) {
+    const again = playing === id;
+    E.stopPreview();
+    if (again) return;
+    const s = byId(id);
+    playing = id; loading = true; render();
+    L.toast(`Preview of ${s.name}: a made-up example; nothing is added to your song. The first play of a style downloads its instruments, which can take a few seconds`, 6000);
+    E.preview(demo(s), () => { playing = null; loading = false; render(); }, () => { loading = false; render(); });
   }
 
   // ---------- panel ----------
-  const nav = (s, act) =>  GENRES.map(g => `<h4>${g}</h4>` + STYLES.filter(x => x.genre === g).map(x => `<button data-style="${x.id}" class="${x === s ? 'on' : ''}">${x.name}${x === act ? '<small>in use</small>' : ''}</button>`).join('')).join('');
+  const pvBtn = x => `<button class="g-pv${playing === x.id ? ' on' : ''}" data-pv="${x.id}" title="${playing === x.id ? 'Stop the preview' : 'Hear what ' + x.name + ' sounds like'}" aria-label="Preview ${x.name}">${L.icon(playing === x.id ? 'stop' : 'play')}</button>`;
+  const row = (x, s, act) => `<div class="g-row"><button data-style="${x.id}" class="${x === s ? 'on' : ''}">${x.name}${x === act ? '<small>in use</small>' : ''}</button>${pvBtn(x)}</div>`;
+  const nav = (s, act) => '<h4>Most popular</h4>' + STYLES.slice(0, 8).map(x => row(x, s, act)).join('') + GENRES.map(g => `<h4>${g}</h4>` + STYLES.filter(x => x.genre === g).map(x => row(x, s, act)).join('')).join('');
   function render() {
     // keep the chord pads on the style's key
     if (applied !== sig()) { applied = sig(); const s = active(); P.S.sev = !!(s && s.sev); if (s) { P.S.key = s.key; P.S.scale = s.scale; } }
@@ -166,14 +314,14 @@ L.guide = (() => {
       <div class="lib-main g-main">
         <div class="g-top">
           <div><h2>${s.name}</h2><p>${s.blurb}</p></div>
-          ${on ? '<button data-g="off">Stop using</button>' : '<button data-g="use" class="g-use">Use this style</button>'}
+          <div class="g-acts"><button class="g-hear${playing === s.id ? ' on' : ''}" data-pv="${s.id}">${L.icon(playing === s.id ? 'stop' : 'play')}${playing === s.id ? (loading ? 'Loading…' : 'Stop') : 'Hear it'}</button>${on ? '<button data-g="off">Stop using</button>' : '<button data-g="use" class="g-use">Use this style</button>'}</div>
         </div>
         <div class="g-cols">
           <section>
             <h3>Key and tempo</h3>
             <div class="g-big">${NOTE[s.key]} ${s.scale.toLowerCase()}</div>
             <div class="g-scale">${NOTE.map((n, i) => `<i class="${i === s.key ? 'rt' : sc.has(i) ? 'in' : ''}">${n}</i>`).join('')}</div>
-            <p class="g-note">${s.bpm} BPM. ${on ? 'These notes are marked on the Keys tab and in the editor: stay on them and nothing sounds wrong. The home note is in red.' : 'Using the style sets the tempo, adds the instruments and marks these notes on the keyboard and in the editor.'}</p>
+            <p class="g-note">${s.bpm} BPM. ${on ? 'These notes are marked on the Keys tab and in the editor: stay on them and nothing sounds wrong. The home note is the one in the accent colour.' : 'Using the style sets the tempo, adds the instruments and marks these notes on the keyboard and in the editor.'}</p>
           </section>
           <section>
             <h3>Instruments</h3>
@@ -181,21 +329,24 @@ L.guide = (() => {
           </section>
           <section>
             <h3>Chords that work</h3>
-            ${s.prog.map((pr, pi) => `<div class="g-prog">${pr.map(d => `<button class="g-ch" data-deg="${d}"><b>${chords[d].name}</b><small>${chords[d].roman}</small></button>`).join('')}${on ? `<button data-g="write" data-pi="${pi}" title="Put these chords, a bass line${s.inst.some(i => i.role === 'Drums') ? ' and a beat' : ''} into the song">Write into song</button>` : ''}</div>`).join('')}
-            <p class="g-note">Press a chord to hear it. ${on ? 'The same chords are highlighted on the pads in the Keys tab (number keys 1 to 7).' : ''}</p>
+            ${s.prog.map((pr, pi) => `<div class="g-prog">${pr.map(d => `<button class="g-ch" data-deg="${d}"><b>${chords[d].name}</b><small>${chords[d].roman}</small></button>`).join('')}${on ? `<button data-g="write" data-pi="${pi}" title="Put these chords, a bass line${s.inst.some(i => i.role === 'Drums') ? ' and a beat' : ''} into the song, played a new way each time">Write backing</button>` : ''}</div>`).join('')}
+            ${on && L.project.gen && L.project.gen.style === s.id && L.project.tracks.some(t => t.clips.some(c => c.gen === L.project.gen.id)) ? `<button class="g-reroll" data-g="reroll" title="Replace the backing written last (bar ${L.project.gen.start / 4 + 1}) with a different one">${L.icon('dice')}New variation</button>` : ''}
+            <p class="g-note">Press a chord to hear it. ${on ? 'Write backing adds chords, bass' + (s.inst.some(i => i.role === 'Drums') ? ' and drums' : '') + ' in this style, played differently every time; the tune is yours to write. The same chords are on the pads in the Keys tab (number keys 1 to 7).' : ''}</p>
           </section>
         </div>
       </div>`;
   }
 
   host.addEventListener('click', e => {
-    const st = e.target.closest('[data-style]'), g = e.target.closest('[data-g]');
+    const st = e.target.closest('[data-style]'), g = e.target.closest('[data-g]'), pv = e.target.closest('[data-pv]');
+    if (pv) return preview(pv.dataset.pv);
     if (st) { view = st.dataset.style; return render(); }
     if (!g) return;
     const a = g.dataset.g;
     if (a === 'use') use(view);
     else if (a === 'off') { L.project.guide = null; L.commit(); }
     else if (a === 'write') write(+g.dataset.pi);
+    else if (a === 'reroll') reroll();
     else if (a === 'add') { const t = addInst(g.dataset.k); L.sel.track = t.id; L.sel.clip = null; L.commit(); }
     else if (a === 'go') L.select(has(g.dataset.k).id, null);
   });

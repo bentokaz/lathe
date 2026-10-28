@@ -25,8 +25,8 @@ L.arr = (() => {
       <div class="trow${t.id === L.sel.track ? ' sel' : ''}" data-track="${t.id}">
         <div class="thead">
           <div class="t-no">${pad(i + 1, 2)}</div>
-          <div class="t-main"><div class="t-name">${esc(t.name)}</div><div class="t-kind">${kind(t)}</div></div>
-          <div class="t-btns"><button data-act="mute" class="${t.mute ? 'on' : ''}" title="Mute">M</button><button data-act="solo" class="solo${t.solo ? ' on' : ''}" title="Solo">S</button><button data-act="showAuto" class="${t.showAuto ? 'on' : ''}" title="Volume automation: draw how loud this track is over time">A</button><button data-act="del" class="t-del" title="Delete track (Ctrl+Z brings it back)" aria-label="Delete track">${L.icon('trash')}</button></div>
+          <div class="t-main"><div class="t-name">${esc(t.name)}</div>${t.showAuto ? autoPick(t) : `<div class="t-kind">${kind(t)}</div>`}</div>
+          <div class="t-btns">${switches(t)}<button data-act="showAuto" class="sw-auto${t.showAuto ? ' on' : ''}" title="Automation: draw how volume, pan, filter, reverb or echo change over time" aria-label="Automation" aria-pressed="${!!t.showAuto}">${L.icon('auto')}</button><button data-act="del" class="t-del" title="Delete track (Ctrl+Z brings it back)" aria-label="Delete track">${L.icon('trash')}</button></div>
           <input class="t-vol" type="range" min="0" max="1" step="0.005" value="${t.vol}" title="Volume">
           <div class="t-meter" data-meter="${t.id}" data-dir="x"><i></i></div>
         </div>
@@ -36,22 +36,30 @@ L.arr = (() => {
     if (L.video) L.video.lane();
   }
 
-  // ---------- volume automation overlay ----------
+  // Mute and solo, shared with the mixer strips: icons that fill in when switched on.
+  L.switches = t => `<button data-act="mute" class="sw-mute${t.mute ? ' on' : ''}" title="Mute: silence this track" aria-label="Mute" aria-pressed="${t.mute}">${L.icon('mute')}</button><button data-act="solo" class="solo sw-solo${t.solo ? ' on' : ''}" title="Solo: hear only this track (and other soloed ones)" aria-label="Solo" aria-pressed="${t.solo}">${L.icon('solo')}</button>`;
+  const switches = L.switches;
+
+  // ---------- automation overlay ----------
   const AP = 7; // padding inside the lane, px
   const ay = v => AP + (1 - v) * (TH - 1 - 2 * AP);
+  const AUTO = L.engine.AUTO, akey = t => AUTO[t.autoK] ? t.autoK : 'vol';
+  const autoPick = t => `<select class="t-apar" title="Which setting the line controls" aria-label="Automation setting">${Object.entries(AUTO).map(([k, a]) => `<option value="${k}"${k === akey(t) ? ' selected' : ''}>${a.name}${t.auto && t.auto[k] && t.auto[k].length ? ' •' : ''}</option>`).join('')}</select>`;
   function autoSvg(t, w) {
-    const pts = (t.auto && t.auto.vol) || [], ppb = L.view.ppb;
-    if (!pts.length) return `<line x1="0" x2="${w}" y1="${ay(1)}" y2="${ay(1)}" class="a-flat"/><text x="8" y="${ay(1) + 14}">Click to add a volume point; drag points, right-click to remove</text>`;
+    const k = akey(t), A = AUTO[k], pts = (t.auto && t.auto[k]) || [], ppb = L.view.ppb;
+    if (!pts.length) { const y = ay(A.def(t)); return `<line x1="0" x2="${w}" y1="${y}" y2="${y}" class="a-flat"/><text x="8" y="${y > TH / 2 ? y - 8 : y + 16}">${A.name}: click to add a point; drag points, right-click to remove</text>`; }
     const xy = pts.map(([b, v]) => [b * ppb, ay(v)]);
     const line = [[0, xy[0][1]], ...xy, [w, xy[xy.length - 1][1]]].map(p => p.join(',')).join(' ');
-    return `<polyline points="${line}"/>${xy.map(([x, y], i) => `<circle data-i="${i}" cx="${x}" cy="${y}" r="4.5"><title>${Math.round(pts[i][1] * 100)}% (${L.db(pts[i][1] ** 2)} dB)</title></circle>`).join('')}`;
+    return `<polyline points="${line}"/>${xy.map(([x, y], i) => `<circle data-i="${i}" cx="${x}" cy="${y}" r="4.5"><title>${A.fmt(pts[i][1])}</title></circle>`).join('')}`;
   }
   function autoDown(e, t, svg) {
     L.focus = 'arr';
-    const ppb = L.view.ppb, rect = svg.getBoundingClientRect();
+    const ppb = L.view.ppb, rect = svg.getBoundingClientRect(), k = akey(t), A = AUTO[k];
     const toB = x => Math.max(0, (x - rect.left) / ppb), toV = y => clamp(1 - (y - rect.top - AP) / (TH - 1 - 2 * AP), 0, 1);
-    t.auto ||= { vol: [] };
-    const pts = t.auto.vol;
+    t.auto ||= {};
+    const pts = t.auto[k] ||= [];
+    // reverb and echo lanes only do something with the effect switched on
+    if (A.fx && !t.fx[A.fx].on && e.button === 0) { t.fx[A.fx].on = true; L.toast(`${A.fx === 'reverb' ? 'Reverb' : 'Delay'} switched on for this track so the line has something to control`); }
     let i = e.target.dataset.i !== undefined ? +e.target.dataset.i : -1;
     if (e.button === 2) { if (i >= 0) { pts.splice(i, 1); L.commit(); } return; }
     if (e.button !== 0) return;
@@ -65,7 +73,7 @@ L.arr = (() => {
       const lo = i > 0 ? pts[i - 1][0] : 0, hi = i < pts.length - 1 ? pts[i + 1][0] : Infinity;
       pt[0] = clamp(snap(toB(ev.clientX), ev), lo, hi); pt[1] = toV(ev.clientY);
       svg.innerHTML = autoSvg(t, +svg.getAttribute('width'));
-      L.toast(`Volume ${Math.round(pt[1] * 100)}% at bar ${(pt[0] / 4 + 1).toFixed(2)}`, 1200);
+      L.toast(`${A.name}: ${A.fmt(pt[1])} at bar ${(pt[0] / 4 + 1).toFixed(2)}`, 1200);
     }, () => L.commit());
   }
 
@@ -144,7 +152,7 @@ L.arr = (() => {
   rows.addEventListener('pointerdown', e => {
     const row = e.target.closest('.trow'); if (!row) return;
     const p = L.project, t = L.trackById(row.dataset.track), ppb = L.view.ppb;
-    if (e.target.closest('.thead')) { if (!e.target.closest('button,input')) L.select(t.id, null); return; }
+    if (e.target.closest('.thead')) { if (!e.target.closest('button,input,select')) L.select(t.id, null); return; }
     const asvg = e.target.closest('svg.auto');
     if (asvg) return autoDown(e, t, asvg);
     L.focus = 'arr';
@@ -216,7 +224,10 @@ L.arr = (() => {
     const t = L.trackById(e.target.closest('.trow').dataset.track);
     t.vol = +e.target.value; L.engine.sync(t);
   });
-  rows.addEventListener('change', e => { if (e.target.classList.contains('t-vol')) L.commit(); });
+  rows.addEventListener('change', e => {
+    if (e.target.classList.contains('t-vol')) L.commit();
+    else if (e.target.classList.contains('t-apar')) { L.trackById(e.target.closest('.trow').dataset.track).autoK = e.target.value; L.commit(); }
+  });
 
   // ---------- ruler: top strip sets the loop, the rest seeks ----------
   ruler.addEventListener('pointerdown', e => {

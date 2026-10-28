@@ -61,9 +61,13 @@
     ['ocean', 'Ocean', '#123b5e', '#06121f', '#ffc933', 1], ['forest', 'Forest', '#1f4430', '#07130b', '#ff8f2b', 1], ['neon', 'Neon', '#2a1046', '#0c0516', '#ff3d9a', 1],
   ];
   $('#themes').innerHTML = THEMES.map(([id, name, a, b, c]) => `<button data-theme-pick="${id}" title="${name}" style="--ta:${a};--tb:${b};--tc:${c}"><i></i><span>${name}</span></button>`).join('');
+  // The tab icon is the Lathe mark (five bars of a sound wave, the middle one in the accent) in the theme's colours.
+  const mark = (panel, well, accent) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="5" fill="${well}"/><g fill="${panel}"><rect x="4.5" y="12" width="3.4" height="8"/><rect x="9.8" y="7.5" width="3.4" height="17"/><rect x="20.8" y="9.5" width="3.4" height="13"/><rect x="26.1" y="13.5" width="1.9" height="5"/></g><rect x="15.3" y="4" width="3.4" height="24" fill="${accent}"/></svg>`;
   const setTheme = name => {
     const th = THEMES.find(t => t[0] === name) || THEMES[0];
     name = th[0];
+    $('link[rel=icon]').href = 'data:image/svg+xml,' + encodeURIComponent(th[5] ? mark('#efe9dd', th[2], th[4]) : mark(th[2], th[3], th[4]));
+    $('meta[name=theme-color]').content = th[5] ? th[2] : th[3];
     document.documentElement.dataset.theme = name;
     if (th[5]) document.documentElement.dataset.dark = ''; else delete document.documentElement.dataset.dark;
     $$('[data-theme-pick]').forEach(b => b.classList.toggle('cur', b.dataset.themePick === name));
@@ -98,10 +102,14 @@
     } catch (err) { L.toast('Could not open that file: ' + err.message, 6000); }
   };
   $('#f-open').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) L.openProjectFile(f); };
-  $('#b-new').onclick = () => {
-    if (!confirm('Start a new project? The current one is replaced. Save it first if you want to keep it.')) return;
-    E.stop(); L.setProject(L.newProject());
-  };
+  $('#b-about').onclick = () => $('#about').showModal();
+
+  // ---------- sounds still downloading ----------
+  L.on('loading', n => {
+    const el = $('#busy');
+    el.hidden = !n;
+    el.querySelector('span').textContent = n === 1 ? 'Loading 1 instrument' : `Loading ${n} instruments`;
+  });
 
   // ---------- keyboard ----------
   const KEYS = L.KEYMAP;
@@ -171,17 +179,66 @@
     requestAnimationFrame(frame);
   }
 
+  // ---------- start screen ----------
+  // Shown on opening: carry on with the last song, start a new one (blank, or from a style), learn with the tutorial,
+  // or pick from recent songs. The song that was open stays in My songs whatever is chosen.
+  const start = $('#start');
+  async function startScreen(first) {
+    const p = L.project, has = !first && p.tracks.some(t => t.clips.length);
+    let recent = [];
+    try { recent = (await L.songs.list()).filter(r => r.id !== p.id).slice(0, 5); } catch { /* no IndexedDB */ }
+    start.querySelector('.st-go').innerHTML = `
+      ${has ? `<button data-st="continue" class="st-main"><small>Carry on with</small><b>${L.esc(p.name)}</b></button>` : ''}
+      <button data-st="blank"${has ? '' : ' class="st-main"'}><b>New blank song</b><small>An empty drum track and synth track to start from</small></button>
+      <button data-st="style"><b>Start from a style</b><small>Pick a kind of music; it sets the key, tempo and instruments, and can write a backing</small></button>
+      <button data-st="tour"${first ? ' class="st-hi"' : ''}><b>Learn with the tutorial</b><small>Sixteen short steps on the demo song, about five minutes</small></button>
+      <button data-st="demo"><b>Open the demo song</b><small>A finished four-track example to take apart</small></button>`;
+    start.querySelector('.st-recent').innerHTML = `<h3>Recent songs</h3>${recent.length ? recent.map(r => `<button data-open="${L.esc(r.id)}"><b>${L.esc(r.name)}</b><small>${new Date(r.at).toLocaleDateString([], { day: 'numeric', month: 'short' })}</small></button>`).join('') : '<p>Songs you make are kept here, in this browser.</p>'}
+      <button data-st="songs" class="st-all">${L.icon('open')}All my songs${L.cloud.enabled ? ' and account' : ''}…</button><button data-st="file" class="st-all">${L.icon('open')}Open a project file…</button>`;
+    start.showModal();
+  }
+  start.addEventListener('click', async e => {
+    const b = e.target.closest('[data-st],[data-open]'); if (!b) return;
+    const a = b.dataset.st;
+    if (b.dataset.open) { start.close(); const p = await L.songs.get(b.dataset.open); if (p) { await L.loadBuffers(L.usedBuffers(p)); await L.video.restore(p); L.setProject(p); } return; }
+    start.close();
+    if (a === 'blank') await L.cloud.newSong();
+    else if (a === 'style') { await L.cloud.newSong(true); L.showTab('guide'); L.toast('Choose a style on the left; press play on any of them to hear it first', 6000); }
+    else if (a === 'demo' || a === 'tour') { const p = L.demoProject(); await L.video.restore(p); L.setProject(p); if (a === 'tour') L.tour.start(); }
+    else if (a === 'songs') L.cloud.open();
+    else if (a === 'file') $('#f-open').click();
+  });
+  start.addEventListener('close', () => { try { localStorage.setItem('lathe.started', '1'); } catch { /* storage blocked */ } });
+
+  // A phone, or a browser without Web Audio, gets a plain explanation instead of a broken screen.
+  function fits() {
+    const msg = $('#small');
+    if (!window.AudioContext || !window.OfflineAudioContext || !window.indexedDB) {
+      msg.querySelector('p').innerHTML = 'This browser cannot run Lathe: it is missing the sound features Lathe is built on. Open it in a recent <b>Chrome</b>, <b>Edge</b>, <b>Firefox</b> or <b>Safari</b> on a computer or Chromebook.';
+      msg.querySelector('button').hidden = true;
+      msg.showModal(); return false;
+    }
+    // the screen size, not the window: a window opened small or in the background should not trigger this
+    if (Math.min(screen.width, screen.height) < 500) { msg.showModal(); return new Promise(res => msg.addEventListener('close', () => res(true), { once: true })); }
+    return true;
+  }
+
   // ---------- boot ----------
   (async () => {
     let p = null;
     try { p = JSON.parse(localStorage.getItem('lathe.project')); } catch { /* corrupt autosave */ }
-    if (!p || !Array.isArray(p.tracks)) p = L.demoProject();
+    // first visit: an empty song waits behind the start screen, which offers the demo and the tutorial
+    if (!p || !Array.isArray(p.tracks)) p = L.newProject();
+    if (!await fits()) return;
     const shared = await L.files.openFromLink();
-    if (shared && confirm(`Open the shared song "${shared.name}"?\n\nIt replaces the song open in this browser. To keep that one, press Cancel and use File, Save first, then open the link again.`)) p = shared;
+    if (shared && await L.ask(`Open the shared song <b>${L.esc(shared.name)}</b>? You get your own copy to play and change. The song you had open stays in File, My songs.`, 'Open it', 'Not now')) p = shared;
     await L.loadBuffers(L.usedBuffers(p));
     await L.video.restore(p);
     $('#snap').value = L.view.snap;
     L.setProject(p);
     requestAnimationFrame(frame);
+    let started = false;
+    try { started = !!localStorage.getItem('lathe.started') || !!localStorage.getItem('lathe.toured'); } catch { /* storage blocked */ }
+    if (p !== shared) startScreen(!started);
   })();
 })();

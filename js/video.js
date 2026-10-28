@@ -166,7 +166,7 @@ L.video = (() => {
     if (mk) {
       const i = +mk.dataset.mk;
       if (e.button === 2) { m.markers.splice(i, 1); return L.commit(); }
-      if (L.dbl('mk' + i)) { const n = prompt('Marker name', m.markers[i].name); if (n) { m.markers[i].name = n.slice(0, 24); L.commit(); } return; }
+      if (L.dbl('mk' + i)) { L.askText('Marker name', m.markers[i].name, 'Rename').then(n => { if (n && m.markers[i]) { m.markers[i].name = n.slice(0, 24); L.commit(); } }); return; }
       return E.seek((m.markers[i].t + m.offset) / L.spb());
     }
     if (!clip || e.button !== 0) return;

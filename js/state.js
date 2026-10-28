@@ -37,8 +37,10 @@
     fx: fx(), clips: [],
   });
 
+  // Songs are known by a long random id, which is also their key in this browser's song list and in an account.
+  L.songId = () => (crypto.randomUUID ? crypto.randomUUID() : uid() + uid() + uid());
   L.newProject = () => ({
-    name: 'Untitled', bpm: 120, loop: { on: false, start: 0, end: 16 }, master: { vol: 0.8 },
+    id: L.songId(), name: 'Untitled', bpm: 120, loop: { on: false, start: 0, end: 16 }, master: { vol: 0.8 },
     tracks: [L.newTrack('drums'), L.newTrack('synth')],
   });
 
@@ -113,11 +115,22 @@
   };
 
   // ---- history: whole-project snapshots ----
+  // Every change is saved in this browser: the open song in localStorage (read first on start-up),
+  // and every song in IndexedDB, so starting a new one never loses the last.
   let hist = [], hi = -1, saveT = 0;
   const persist = () => {
     clearTimeout(saveT);
-    saveT = setTimeout(() => { try { localStorage.setItem('lathe.project', hist[hi]); } catch { /* storage full or blocked */ } }, 400);
+    L.emit('savestate', 'pending');
+    saveT = setTimeout(async () => {
+      saveT = 0;
+      const json = hist[hi], p = L.project;
+      try { localStorage.setItem('lathe.project', json); } catch { /* storage full or blocked */ }
+      // a song joins the list once it has something in it, so empty starts do not pile up
+      if (p.tracks.some(t => t.clips.length) || p.video) try { await L.idbPut('songs', p.id, { id: p.id, name: p.name, at: Date.now(), json }); } catch { /* no IndexedDB */ }
+      L.emit('savestate', 'local');
+    }, 400);
   };
+  L.savePending = () => !!saveT;
   L.commit = () => {
     hist.length = hi + 1;
     hist.push(JSON.stringify(L.project));
@@ -134,18 +147,30 @@
   L.undo = () => travel(-1);
   L.redo = () => travel(1);
   // fills in settings that projects saved by an older version do not have
-  const upgrade = p => { const d = fx(); p.tracks.forEach(t => { for (const k in d) if (!t.fx[k]) t.fx[k] = d[k]; }); return p; };
+  const upgrade = p => {
+    const d = fx();
+    p.tracks.forEach(t => { for (const k in d) if (!t.fx[k]) t.fx[k] = d[k]; });
+    p.id ||= L.songId(); p.master ||= { vol: 0.8 }; p.loop ||= { on: false, start: 0, end: 16 };
+    return p;
+  };
   L.setProject = p => {
     upgrade(p);
     L.project = p; hist = [JSON.stringify(p)]; hi = 0;
     L.sel.track = null; L.sel.clip = null; L.sel.notes.clear(); L.pos = 0;
-    fixSel(); persist(); L.emit('change');
+    fixSel(); persist(); L.emit('load'); L.emit('change');
+  };
+
+  // ---- songs kept in this browser ----
+  L.songs = {
+    list: () => L.idbAll('songs').then(a => a.sort((x, y) => y.at - x.at)).catch(() => []),
+    get: id => L.idbGet('songs', id).then(r => r ? JSON.parse(r.json) : null),
+    del: id => L.idbDel('songs', id),
   };
 
   // ---- audio buffer store (IndexedDB) ----
   const idb = () => new Promise((res, rej) => {
-    const r = indexedDB.open('lathe', 2);
-    r.onupgradeneeded = () => ['buf', 'vid'].forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s); });
+    const r = indexedDB.open('lathe', 3);
+    r.onupgradeneeded = () => ['buf', 'vid', 'songs'].forEach(s => { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s); });
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
   });
@@ -153,6 +178,7 @@
   L.idbPut = (store, key, val) => idbReq(store, 'readwrite', s => s.put(val, key));
   L.idbGet = (store, key) => idbReq(store, 'readonly', s => s.get(key));
   L.idbDel = (store, key) => idbReq(store, 'readwrite', s => s.delete(key));
+  L.idbAll = store => idbReq(store, 'readonly', s => s.getAll());
   L.addBuffer = (buf, id = uid()) => {
     L.buffers.set(id, buf);
     idb().then(db => {
@@ -162,21 +188,24 @@
     }).catch(() => {});
     return id;
   };
-  // Loads stored buffers the project still references; drops the rest.
+  // Loads the stored buffers in `used`, and drops any that no song in this browser refers to any more.
   L.loadBuffers = async used => {
     try {
+      const keep = new Set(used);
+      for (const r of await L.songs.list()) { try { L.usedBuffers(JSON.parse(r.json)).forEach(id => keep.add(id)); } catch { /* damaged entry */ } }
       const db = await idb();
       await new Promise(res => {
         const req = db.transaction('buf', 'readwrite').objectStore('buf').openCursor();
         req.onsuccess = () => {
           const cur = req.result;
           if (!cur) return res();
-          if (used.has(cur.key)) {
+          if (!keep.has(cur.key)) cur.delete();
+          else if (used.has(cur.key)) {
             const v = cur.value;
             const b = new AudioBuffer({ length: v.ch[0].length, numberOfChannels: v.ch.length, sampleRate: v.sr });
             v.ch.forEach((d, i) => b.copyToChannel(d, i));
             L.buffers.set(cur.key, b);
-          } else cur.delete();
+          }
           cur.continue();
         };
         req.onerror = () => res();

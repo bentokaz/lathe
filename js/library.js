@@ -66,6 +66,7 @@ L.lib = (() => {
   const TOTAL = ALL.reduce((n, c) => n + c.items.length, 0);
 
   // ---------- sample loading ----------
+  let pending = 0; // downloads in progress, shown in the top bar
   const sets = new Map(); // name -> { ready, bufs: Map(pitch -> AudioBuffer), meta: Map(pitch -> prep result), keys, norm, promise }
 
   // Cleans one decoded note in place and reports how to play it:
@@ -117,6 +118,7 @@ L.lib = (() => {
     if (s) return s.promise;
     s = { ready: false, bufs: new Map(), meta: new Map(), keys: [], norm: 1 };
     sets.set(key, s);
+    L.emit('loading', ++pending);
     s.promise = (async () => {
       try {
         let res = null;
@@ -144,6 +146,7 @@ L.lib = (() => {
         return false;
       }
     })();
+    s.promise.finally(() => L.emit('loading', --pending));
     return s.promise;
   }
   function sample(name, pitch, font) {

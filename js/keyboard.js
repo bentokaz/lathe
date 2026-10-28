@@ -19,7 +19,7 @@ L.kb = (() => {
         <span class="lbl">Track</span><b class="kb-track">${t ? esc(t.name) : 'none'}</b>
         ${t && t.type === 'synth' ? `<span class="lbl">Octave</span><span class="stepper"><button data-a="oct-" title="Octave down (Z)">−</button><b>C${oct}</b><button data-a="oct+" title="Octave up (X)">+</button></span>` : ''}
         <span class="lbl">Velocity</span><input class="kb-vel" type="range" min="0.1" max="1" step="0.01" value="${L.view.vel}">
-        <span class="ed-hint">${gs ? `Marked keys fit ${gs.name}; red is the home note` : 'Click or drag across the keys, or use the letters printed on them'}</span>
+        <span class="ed-hint">${gs ? `Marked keys fit ${gs.name}; the coloured one is the home note` : 'Click or drag across the keys, or use the letters printed on them'}</span>
       </div>`;
     let body;
     if (!t || t.type === 'audio') {

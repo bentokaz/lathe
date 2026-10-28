@@ -106,8 +106,48 @@ const ICONS = {
   film: '<rect x="1.5" y="3" width="13" height="10"/><path d="M4.5 3v10M11.5 3v10M1.5 6.3h3M1.5 9.7h3M11.5 6.3h3M11.5 9.7h3"/>',
   rec: '<circle cx="8" cy="8" r="4.5" fill="currentColor"/>',
   browse: '<path d="M2 3h5M2 8h12M2 13h12M10 1.5v3M12.5 3H9"/>',
+  // switches: drawn in outline; inside a button that is on, the .fl parts fill in (see the stylesheet)
+  mute: '<path class="fl" d="M1.5 5.8h3L8.5 2.5v11l-4-3.3h-3z"/><path d="M10.8 5.8l3.9 4.4M14.7 5.8l-3.9 4.4"/>',
+  solo: '<path d="M2.5 10.5V8a5.5 5.5 0 0 1 11 0v2.5"/><path class="fl" d="M2 9.5h3.2v5H2zM10.8 9.5H14v5h-3.2z"/>',
+  auto: '<path d="M1.5 13 5.5 6.5l4 3.5 5-7.5"/><rect class="fl" x="4" y="5" width="3" height="3"/><rect class="fl" x="8" y="8.5" width="3" height="3"/>',
+  user: '<circle cx="8" cy="5" r="3"/><path d="M2 15c.5-3.5 3-5 6-5s5.5 1.5 6 5"/>',
+  play: '<path class="fl" d="M4.5 2.5v11l9-5.5z"/>',
+  stop: '<rect class="fl" x="3.5" y="3.5" width="9" height="9"/>',
+  dice: '<rect x="2" y="2" width="12" height="12"/><rect class="fl" x="4.5" y="4.5" width="2" height="2"/><rect class="fl" x="9.5" y="9.5" width="2" height="2"/><rect class="fl" x="7" y="7" width="2" height="2"/>',
+  plus: '<path d="M8 2.5v11M2.5 8h11"/>',
+  open: '<path d="M1.5 3.5h5l1.5 2h6.5v8h-13z"/>',
+  info: '<circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.5v.5"/>',
+  pen: '<path d="M2.5 13.5l.6-3L10.5 3l2.5 2.5-7.4 7.4zM9 4.5l2.5 2.5"/>',
+  cloud: '<path d="M4.5 12.5h7.5a3 3 0 0 0 .3-6A4.3 4.3 0 0 0 4 6.2a3.2 3.2 0 0 0 .5 6.3z"/>',
 };
 L.icon = n => `<svg class="ic" viewBox="0 0 16 16" aria-hidden="true">${ICONS[n]}</svg>`;
+
+// In-app stand-ins for confirm() and prompt(), styled like the rest of Lathe.
+// ask(html, ok) resolves true or false; askText(label, value) resolves the text, or null if cancelled.
+function modal(html, value, focus) {
+  return new Promise(res => {
+    const d = document.createElement('dialog');
+    d.className = 'ask';
+    d.innerHTML = html;
+    document.body.append(d);
+    const done = v => { d.close(); d.remove(); res(v); };
+    d.addEventListener('cancel', e => { e.preventDefault(); done(value('0')); });
+    d.addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (b) done(value(b.dataset.v)); });
+    d.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); done(value('1')); } });
+    d.showModal();
+    focus(d);
+  });
+}
+L.ask = (html, ok = 'OK', cancel = 'Cancel') => modal(
+  `<p>${html}</p><div class="fb-foot"><button data-v="0">${cancel}</button><button data-v="1" class="strong">${ok}</button></div>`,
+  v => v === '1', d => d.querySelector('.strong').focus());
+L.askText = (label, value = '', ok = 'OK') => {
+  let inp;
+  return modal(
+    `<label class="ask-l"><span>${label}</span><input type="text" spellcheck="false"></label><div class="fb-foot"><button data-v="0">Cancel</button><button data-v="1" class="strong">${ok}</button></div>`,
+    v => v === '1' ? inp.value.trim() || null : null,
+    d => { inp = d.querySelector('input'); inp.value = value; inp.select(); });
+};
 
 // Typing-keyboard layout: key code -> [semitone above the keyboard octave, label].
 L.KEYMAP = { KeyA: [0, 'A'], KeyW: [1, 'W'], KeyS: [2, 'S'], KeyE: [3, 'E'], KeyD: [4, 'D'], KeyF: [5, 'F'], KeyT: [6, 'T'], KeyG: [7, 'G'], KeyY: [8, 'Y'], KeyH: [9, 'H'], KeyU: [10, 'U'], KeyJ: [11, 'J'], KeyK: [12, 'K'], KeyO: [13, 'O'], KeyL: [14, 'L'], KeyP: [15, 'P'], Semicolon: [16, ';'] };

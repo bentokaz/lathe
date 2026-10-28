@@ -4,14 +4,19 @@
 <meta charset="utf-8">
 <title>Lathe</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Lathe: make music in your browser. Tracks, instruments, styles, mixing, video scoring and export.">
+<meta name="theme-color" content="#1c1b19">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
 <header id="top">
   <div id="brand">
-    <b>LATHE</b>
-    <input id="pname" spellcheck="false" aria-label="Project name">
+    <div class="br-top"><b>LATHE</b><span id="saved" aria-live="polite"></span></div>
+    <input id="pname" spellcheck="false" aria-label="Song name" title="Song name: click to rename">
   </div>
 
   <div id="clock">
@@ -33,7 +38,8 @@
     <button id="b-metro" title="Metronome click on or off (M)" aria-label="Metronome"><svg viewBox="0 0 16 16"><path d="M6 1h4l3 14H3zM7.4 3L5.2 13h5.6L8.6 3z"/><rect x="7.5" y="5" width="1" height="7" transform="rotate(18 8 12)"/></svg></button>
   </div>
 
-  <div id="status"></div>
+  <div id="status" aria-live="polite"></div>
+  <div id="busy" hidden><i></i><span></span></div>
 
   <nav id="file">
     <button id="b-undo" class="ib" title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3 2 7l4 4"/><path d="M2 7h7.5a3.5 3.5 0 0 1 0 7H7"/></svg></button>
@@ -42,7 +48,8 @@
     <div class="menu" id="m-file">
       <button>File<svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
       <div class="menu-p">
-        <button id="b-new">New project</button>
+        <button id="b-new">New song</button>
+        <button id="b-songs">My songs…</button>
         <button id="b-open">Open project file…</button>
         <button id="b-save">Save project file<kbd>Ctrl S</kbd></button>
         <button id="b-export">Export audio, MIDI or video…</button>
@@ -51,12 +58,14 @@
       </div>
     </div>
     <button id="b-fb" class="fb-btn" title="Send feedback or report a bug">Feedback</button>
+    <button id="b-acct" class="ib" title="My songs and account" aria-label="My songs and account"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="3"/><path d="M2 15c.5-3.5 3-5 6-5s5.5 1.5 6 5"/></svg></button>
     <div class="menu" id="m-set">
       <button class="ib" title="Settings and help" aria-label="Settings and help"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.2v2.3M8 12.5v2.3M1.2 8h2.3M12.5 8h2.3M3.2 3.2l1.6 1.6M11.2 11.2l1.6 1.6M3.2 12.8l1.6-1.6M11.2 4.8l1.6-1.6"/><circle cx="8" cy="8" r="4.6"/></svg></button>
       <div class="menu-p">
         <button id="b-tour">Tutorial</button>
         <button id="b-help">Keyboard shortcuts</button>
         <button id="b-fb2">Send feedback or report a bug</button>
+        <button id="b-about">About and credits</button>
         <div class="menu-sep">Theme</div>
         <div id="themes"></div>
       </div>
@@ -126,7 +135,8 @@
     <dt>/ &nbsp; M</dt><dd>Loop, metronome</dd>
     <dt>A W S E D F T G Y H U J K</dt><dd>Play the selected instrument</dd>
     <dt>Z &nbsp; X</dt><dd>Octave down, up</dd>
-    <dt>A on a track</dt><dd>Volume automation: click the line to add points, drag them, right-click to remove</dd>
+    <dt>Line button on a track</dt><dd>Automation: pick Volume, Pan, Filter, Reverb or Echo under the track name, then click the line to add points, drag them, right-click to remove</dd>
+    <dt>Speaker, headphones</dt><dd>Mute a track; solo it (hear only the soloed tracks). Filled in means on</dd>
     <dt>File menu</dt><dd>Export audio (WAV, AIFF, MP3, AAC, Opus), MIDI, or the video with your music (MP4, MOV, WebM, MKV); copy a link that gives someone their own copy of the song</dd>
     <dt>Import file</dt><dd>Audio (WAV, AIFF, MP3, AAC/M4A, FLAC, OGG, Opus and more), MIDI, video (MP4, MOV, WebM, MKV and more) or a saved Lathe project</dd>
     <dt>Styles tab</dt><dd>Pick a kind of music; it sets key, tempo and instruments and marks the notes that fit</dd>
@@ -143,6 +153,39 @@
     <dt>Ctrl + drag a clip</dt><dd>Drag out a copy</dd>
   </dl>
   <p>Timeline: double-click an empty lane to make a clip, double-click a clip to edit it. Drag in the thin strip above the bar numbers to set the loop. Drop audio files anywhere on the timeline.</p>
+  <form method="dialog"><button>Close</button></form>
+</dialog>
+
+<dialog id="start" aria-label="Start">
+  <div class="st-brand"><b>LATHE</b><p>Make music in your browser: write, record, mix and score to video.</p></div>
+  <div class="st-go"></div>
+  <div class="st-recent"></div>
+</dialog>
+
+<dialog id="small">
+  <h2>Best on a bigger screen</h2>
+  <p>Lathe is a full music studio with a timeline, an editor and a mixer, and it needs a laptop, desktop or Chromebook screen to fit. On a phone it is cramped, and some parts will not fit.</p>
+  <form method="dialog" class="fb-foot"><button class="strong">Open it anyway</button></form>
+</dialog>
+
+<dialog id="about">
+  <h2>About Lathe</h2>
+  <p>Lathe is a music studio that runs in the browser: tracks, sampled and synthesised instruments, a piano roll, styles that guide you through a genre, a mixer with effects and automation, video scoring, and export to audio, MIDI and video. Made by bentokaz as a school project. The code is on <a href="https://github.com/bentokaz/lathe" target="_blank" rel="noopener">GitHub</a>.</p>
+  <h3>Instrument recordings</h3>
+  <dl class="cr">
+    <dt>Sampled instruments</dt><dd>General MIDI soundfonts prepared by Benjamin Gleitzman in <a href="https://github.com/gleitz/midi-js-soundfonts" target="_blank" rel="noopener">midi-js-soundfonts</a>:</dd>
+    <dt>Set A</dt><dd>MusyngKite, Creative Commons Attribution-ShareAlike 3.0</dd>
+    <dt>Set B</dt><dd>FatBoy (<a href="https://fatboy.site" target="_blank" rel="noopener">fatboy.site</a>), Creative Commons Attribution-ShareAlike 3.0</dd>
+    <dt>Set C</dt><dd>FluidR3 GM, Creative Commons Attribution 3.0</dd>
+    <dt>Everything else</dt><dd>Guitars, ukulele and other plucked strings, the synths and the drum kits are generated by Lathe as you play; no recordings.</dd>
+  </dl>
+  <h3>Libraries</h3>
+  <dl class="cr">
+    <dt>Mediabunny</dt><dd>Reading and writing video and audio files (MPL 2.0)</dd>
+    <dt>lamejs</dt><dd>MP3 export (LGPL 3.0)</dd>
+    <dt>supabase-js</dt><dd>Accounts and online saving, when switched on (MIT)</dd>
+  </dl>
+  <p>Fonts are the ones already on your computer (Bahnschrift and Cascadia Mono on Windows). Songs stay in your browser unless you sign in; an account stores only your email address and your songs.</p>
   <form method="dialog"><button>Close</button></form>
 </dialog>
 <input id="f-open" type="file" accept=".json,.lathe,application/json" hidden>
@@ -162,6 +205,8 @@
 <script src="js/video.js"></script>
 <script src="js/files.js"></script>
 <script src="js/export.js"></script>
+<script src="js/config.js"></script>
+<script src="js/cloud.js"></script>
 <script src="js/main.js"></script>
 <script src="js/feedback.js"></script>
 <script src="js/tutorial.js"></script>

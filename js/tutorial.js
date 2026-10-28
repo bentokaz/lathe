@@ -21,20 +21,20 @@ L.tour = (() => {
   // base(): snapshot on entry. done(base): finished? skipIf(): step does not apply right now.
   const STEPS = [
     { title: 'Hear the demo', target: '#b-play',
-      body: 'Press <kbd>Space</kbd> or the play button. The red line is the playhead; it sweeps across the timeline as the song plays.',
+      body: 'Press <kbd>Space</kbd> or the play button. The coloured line is the playhead; it sweeps across the timeline as the song plays.',
       done: () => E.playing },
     { title: 'Pause and rewind', target: '#b-home',
       body: 'Press <kbd>Space</kbd> again to pause, then <kbd>Enter</kbd> to send the playhead back to the start.',
       done: () => !E.playing && L.pos === (L.project.loop.on ? L.project.loop.start : 0) },
 
     { title: 'Pick a kind of music', target: '#guide .g-top', enter: () => L.showTab('guide'),
-      body: 'This is the <b>Styles</b> tab. Choose anything from the list on the left (try <b>Dream pop</b>, <b>Sand dunes</b> or <b>Lobby bossa</b>) and press <b>Use this style</b>. It sets the key and tempo and adds the right instruments as new tracks.',
+      body: 'This is the <b>Styles</b> tab. The list on the left starts with the most popular kinds of music; the play button next to each one lets you hear an example first. Choose one and press <b>Use this style</b>. It sets the key and tempo and adds the right instruments as new tracks.',
       base: () => L.project.guide, done: b => !!L.project.guide && (L.project.guide !== b || !b) },
-    { title: 'Let it write the chords', target: '#guide .g-prog', enter: () => L.showTab('guide'),
-      body: 'Each style lists chords that work together. Press a chord to hear it, then press <b>Write into song</b>: the chords and a bass line land on the timeline at the playhead.',
+    { title: 'Let it write a backing', target: '#guide .g-prog', enter: () => L.showTab('guide'),
+      body: 'Each style lists chords that work together. Press a chord to hear it, then press <b>Write backing</b>: chords, bass and drums in this style land on the timeline, played a new way every time. Not keen? <b>New variation</b> swaps it for another take.',
       base: clipCount, done: b => clipCount() > b, skipIf: () => !L.project.guide },
     { title: 'Play along on the marked keys', target: '.kb-piano', enter: () => L.showTab('keys'),
-      body: 'The <b>Keys</b> tab is a keyboard for the highlighted track. Keys with a dot belong to the style; the red ones are the home note. Click them, or type <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> (white) and <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> (black). <kbd>Z</kbd> and <kbd>X</kbd> change octave. Play four notes.',
+      body: 'The <b>Keys</b> tab is a keyboard for the highlighted track. Keys with a dot belong to the style; the bigger coloured ones are the home note. Click them, or type <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> (white) and <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> (black). <kbd>Z</kbd> and <kbd>X</kbd> change octave. Play four notes.',
       base: () => played, done: b => played >= b + 4, skipIf: () => selTrack()?.type !== 'synth' },
     { title: 'Whole chords from one press', target: '.ch-pads', enter: () => L.showTab('keys'),
       body: 'These seven pads are the chords of the key; the underlined ones are the style\'s own. Click two of them, or press number keys <kbd>1</kbd> to <kbd>7</kbd>. To the left, <b>One key plays</b> turns every key into a chord and <b>Arpeggio</b> ripples whatever you hold.',
@@ -60,14 +60,17 @@ L.tour = (() => {
       body: 'Press play to hear the loop go round. Then switch the bottom panel to the <b>Mixer</b> using the tab on its left edge.',
       done: () => !$('#mixer').hidden },
     { title: 'Switch on an effect', target: '.strip.sel', clip: '#mixer',
-      body: 'Every strip has a fader, pan, mute and solo. The six small buttons are effects: <b>eq</b>, <b>di</b>stortion, <b>co</b>mpressor, <b>ch</b>orus, <b>de</b>lay, <b>re</b>verb. Turn one on. Its settings appear in the right-hand panel.',
+      body: 'Every strip has a fader, pan, mute (speaker) and solo (headphones); filled in means on. The six small buttons are effects: <b>eq</b>, <b>di</b>stortion, <b>co</b>mpressor, <b>ch</b>orus, <b>de</b>lay, <b>re</b>verb. Turn one on. Its settings appear in the right-hand panel.',
       base: fxCount, done: b => fxCount() !== b },
 
+    { title: 'Draw a change over time', target: '.trow.sel .sw-auto', clip: '#arr',
+      body: 'Press the line button on the highlighted track. Pick what to change under the track name (<b>Volume</b>, <b>Pan</b>, <b>Filter</b>, <b>Reverb</b> or <b>Echo</b>), then click in the lane to add points and drag them: a filter that opens over four bars is a classic build-up.',
+      base: () => JSON.stringify(L.project.tracks.map(t => t.auto || {})), done: b => JSON.stringify(L.project.tracks.map(t => t.auto || {})) !== b && L.project.tracks.some(t => t.auto && Object.values(t.auto).some(p => p.length)) },
     { title: 'Score a video (optional)', target: '#m-file',
-      body: 'Open <b>File</b> and choose <b>Add video to score</b> (or drop a video file on the timeline) and the film appears top right with a thumbnail strip above the tracks. It follows the playhead, the flag button drops markers on moments you want to hit, and <b>File, Export video with music</b> saves the result. No video to hand? Press <b>Skip</b>.',
+      body: 'Open <b>File</b> and choose <b>Add video to score</b> (or drop a video file on the timeline) and the film appears top right with a thumbnail strip above the tracks. It follows the playhead, the flag button drops markers on moments you want to hit, and <b>File, Export</b> saves it with your music. No video to hand? Press <b>Skip</b>.',
       done: () => !!L.project.video },
     { title: 'That is the whole loop', target: '#m-file',
-      body: 'Pick a style, write clips, arrange, mix, then <b>File, Export</b> (audio, MIDI or video). Your work autosaves in this browser; <b>File, Save</b> writes a project file you can keep. <b>R</b> records what you play. The gear menu lists every shortcut and replays this tutorial.',
+      body: 'Pick a style, write clips, arrange, mix, then <b>File, Export</b> (audio, MIDI or video). Every change saves by itself; <b>File, My songs</b> lists your songs (and keeps them online if you sign in), and <b>File, Save project file</b> writes a file you can keep. <b>R</b> records what you play. The gear menu lists every shortcut and replays this tutorial.',
       last: true },
   ];
 
@@ -147,10 +150,6 @@ L.tour = (() => {
     if (t === 'end') end(); else if (t === 'skip') go(i + 1); else if (t === 'back') go(i - 1);
   });
   $('#b-tour').onclick = start;
-
-  let seen = false;
-  try { seen = !!localStorage.getItem('lathe.toured'); } catch { /* storage blocked */ }
-  if (!seen) setTimeout(start, 400);
 
   return { start, end };
 })();

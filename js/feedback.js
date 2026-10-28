@@ -3,7 +3,7 @@
 // and handed to GitHub as a ready-filled issue (posting needs a free GitHub account); it can also be copied.
 L.feedback = (() => {
   const { $, esc } = L;
-  const REPO = 'bentokaz/lathe', VERSION = '2026.10.16';
+  const REPO = 'bentokaz/lathe', VERSION = '2026.10.28';
   const errors = [];
 
   // remember the last few things that went wrong, so a bug report can include them

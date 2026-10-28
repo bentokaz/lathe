@@ -198,12 +198,12 @@ L.files = (() => {
     const p = JSON.parse(JSON.stringify(L.project));
     const dropped = p.tracks.filter(t => t.type === 'audio' && t.clips.length).length;
     p.tracks = p.tracks.filter(t => !(t.type === 'audio' && t.clips.length));
-    delete p.video;
+    delete p.video; delete p.id; // whoever opens the link gets a song of their own
     const packed = await new Response(new Blob([JSON.stringify(p)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
     const url = location.origin + location.pathname + '#song=' + b64url(packed);
     const note = dropped ? ` Recorded audio is not included (${dropped} track${dropped > 1 ? 's' : ''} left out); use File, Save for those.` : '';
     try { await navigator.clipboard.writeText(url); L.toast(`Link copied. Anyone who opens it gets their own copy of "${L.project.name}" to play and change.${note}`, 9000); }
-    catch { prompt('Copy this link:', url); }
+    catch { L.askText('Copy this link to share the song', url, 'Done'); }
   }
   async function openFromLink() {
     const m = location.hash.match(/^#song=([\w-]+)/);

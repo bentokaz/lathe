@@ -46,7 +46,7 @@ L.engine = (() => {
       dIn: c.createGain(), delay: c.createDelay(4), dFb: c.createGain(), dWet: c.createGain(), dOut: c.createGain(),
       rIn: c.createGain(), conv: c.createConvolver(), rWet: c.createGain(), rOut: c.createGain(),
       cIn: c.createGain(), cDel: c.createDelay(0.1), cLfo: c.createOscillator(), cDepth: c.createGain(), cWet: c.createGain(), cOut: c.createGain(),
-      pan: c.createStereoPanner(), vol: c.createGain(), auto: c.createGain(), an: c.createAnalyser(),
+      flt: bq('lowpass', 20000, 0.7), pan: c.createStereoPanner(), vol: c.createGain(), auto: c.createGain(), an: c.createAnalyser(),
     };
     n.an.fftSize = 512; n.shaper.oversample = '2x';
     n.lo.connect(n.mid).connect(n.hi);
@@ -55,7 +55,7 @@ L.engine = (() => {
     // chorus: a short delay whose length is swept by a slow oscillator, mixed with the dry signal
     n.cIn.connect(n.cOut); n.cIn.connect(n.cDel).connect(n.cWet).connect(n.cOut);
     n.cLfo.connect(n.cDepth).connect(n.cDel.delayTime); n.cDel.delayTime.value = 0.018; n.cLfo.start();
-    n.pan.connect(n.vol); n.vol.connect(n.auto); n.auto.connect(n.an); n.auto.connect(g.master);
+    n.flt.connect(n.pan); n.pan.connect(n.vol); n.vol.connect(n.auto); n.auto.connect(n.an); n.auto.connect(g.master);
     g.tracks.set(t.id, n);
   }
 
@@ -72,17 +72,17 @@ L.engine = (() => {
       if (f.chorus.on) { cur.connect(n.cIn); cur = n.cOut; }
       if (f.delay.on) { cur.connect(n.dIn); cur = n.dOut; }
       if (f.reverb.on) { cur.connect(n.rIn); cur = n.rOut; }
-      cur.connect(n.pan);
+      cur.connect(n.flt);
     }
     n.lo.gain.value = f.eq.low; n.mid.gain.value = f.eq.mid; n.hi.gain.value = f.eq.high;
     if (n._amt !== f.dist.amt) { n.shaper.curve = distCurve(f.dist.amt); n._amt = f.dist.amt; }
     n.comp.threshold.value = f.comp.thr; n.comp.ratio.value = f.comp.ratio;
     n.delay.delayTime.setTargetAtTime(clamp(f.delay.time * 60 / proj.bpm, 0.01, 4), now, 0.03);
     n.cLfo.frequency.value = f.chorus.rate; n.cDepth.gain.value = f.chorus.depth * 0.006; n.cWet.gain.value = f.chorus.mix;
-    n.dFb.gain.value = f.delay.fb; n.dWet.gain.value = f.delay.mix;
+    n.dFb.gain.value = f.delay.fb;
     if (f.reverb.on && n._size !== f.reverb.size) { n.conv.buffer = impulse(g, f.reverb.size); n._size = f.reverb.size; }
-    n.rWet.gain.value = f.reverb.mix * 1.6;
-    n.pan.pan.setTargetAtTime(t.pan, now, 0.02);
+    // settings with drawn automation follow it instead (scheduleAuto, autoHold)
+    for (const k in AUTO) if (!autoPts(t, k)) AUTO[k].prm(n).setTargetAtTime(AUTO[k].val(AUTO[k].def(t)), now, 0.02);
     const solo = proj.tracks.some(x => x.solo), silent = t.mute || (solo && !t.solo);
     n.vol.gain.setTargetAtTime(silent ? 0 : L.gain(t.vol), now, 0.015);
   }
@@ -301,10 +301,18 @@ L.engine = (() => {
       }
     }
   }
-  // Volume automation: points [beat, level 0..1] joined by straight lines; level 1 leaves the fader as it is.
-  const autoGain = v => v * v;
-  function autoAt(pts, beat) {
-    if (!pts || !pts.length) return 1;
+  // Automation lanes. Points are [beat, 0..1] joined by straight lines; each lane maps 0..1 onto one setting.
+  // def is the level when a lane has no points, so an empty lane leaves the track as its knobs set it.
+  const AUTO = {
+    vol: { name: 'Volume', def: () => 1, prm: n => n.auto.gain, val: v => v * v, fmt: v => Math.round(v * 100) + '% (' + L.db(v * v) + ' dB)' },
+    pan: { name: 'Pan', def: t => (t.pan + 1) / 2, prm: n => n.pan.pan, val: v => v * 2 - 1, fmt: v => Math.abs(v - 0.5) < 0.01 ? 'Centre' : Math.round(Math.abs(v * 200 - 100)) + '% ' + (v < 0.5 ? 'left' : 'right') },
+    cut: { name: 'Filter', def: () => 1, prm: n => n.flt.frequency, val: v => 60 * 2 ** (v * 8.35), exp: true, fmt: v => v > 0.995 ? 'Open' : Math.round(60 * 2 ** (v * 8.35)) + ' Hz' },
+    rev: { name: 'Reverb', def: t => t.fx.reverb.mix, prm: n => n.rWet.gain, val: v => v * 1.6, fx: 'reverb', fmt: v => Math.round(v * 100) + '% reverb' },
+    dly: { name: 'Echo', def: t => t.fx.delay.mix, prm: n => n.dWet.gain, val: v => v, fx: 'delay', fmt: v => Math.round(v * 100) + '% echo' },
+  };
+  const autoPts = (t, k) => t.auto && t.auto[k] && t.auto[k].length ? t.auto[k] : null;
+  function autoAt(pts, beat, def = 1) {
+    if (!pts || !pts.length) return def;
     if (beat <= pts[0][0]) return pts[0][1];
     for (let i = 1; i < pts.length; i++) if (beat <= pts[i][0]) {
       const [b0, v0] = pts[i - 1], [b1, v1] = pts[i];
@@ -316,14 +324,20 @@ L.engine = (() => {
     const t0 = b2t(from);
     for (const t of proj.tracks) {
       const n = g.tracks.get(t.id); if (!n) continue;
-      const pts = t.auto && t.auto.vol, prm = n.auto.gain;
-      prm.cancelScheduledValues(t0);
-      prm.setValueAtTime(autoGain(autoAt(pts, from)), t0);
-      if (pts) for (const [b, v] of pts) if (b > from && b < limit) prm.linearRampToValueAtTime(autoGain(v), b2t(b));
+      for (const k in AUTO) {
+        const pts = autoPts(t, k); if (!pts) continue;
+        const A = AUTO[k], prm = A.prm(n), v = x => Math.max(1e-4, A.val(x));
+        prm.cancelScheduledValues(t0);
+        prm.setValueAtTime(A.val(autoAt(pts, from)), t0);
+        for (const [b, x] of pts) if (b > from && b < limit) A.exp ? prm.exponentialRampToValueAtTime(v(x), b2t(b)) : prm.linearRampToValueAtTime(A.val(x), b2t(b));
+      }
     }
   }
   function autoHold(g, proj, beat) {
-    for (const t of proj.tracks) { const n = g.tracks.get(t.id); if (n) { n.auto.gain.cancelScheduledValues(0); n.auto.gain.value = autoGain(autoAt(t.auto && t.auto.vol, beat)); } }
+    for (const t of proj.tracks) {
+      const n = g.tracks.get(t.id); if (!n) continue;
+      for (const k in AUTO) { const pts = autoPts(t, k); if (!pts) continue; const prm = AUTO[k].prm(n); prm.cancelScheduledValues(0); prm.value = AUTO[k].val(autoAt(pts, beat)); }
+    }
   }
   E_autoAt = autoAt;
 
@@ -348,7 +362,7 @@ L.engine = (() => {
   E.reconcile = () => {
     if (!G) return;
     const p = L.project, ids = new Set(p.tracks.map(t => t.id));
-    for (const [id, n] of G.tracks) if (!ids.has(id)) { n.vol.disconnect(); n.auto.disconnect(); G.tracks.delete(id); }
+    for (const [id, n] of G.tracks) if (!ids.has(id)) { n.vol.disconnect(); n.auto.disconnect(); n.cLfo.stop(); G.tracks.delete(id); }
     p.tracks.forEach(t => { if (!G.tracks.has(t.id)) addTrack(G, t); });
     syncAll(G, p);
   };
@@ -397,6 +411,7 @@ L.engine = (() => {
   E.play = () => {
     ensure();
     if (E.playing) return;
+    E.stopPreview();
     const A = { time: ctx.currentTime + 0.08, beat: L.pos }, p = L.project, spb = 60 / p.bpm;
     anchors = [A]; sched = L.pos; E.playing = true;
     startSpanning(G, p, L.pos, b => A.time + (b - A.beat) * spb, p.loop.on && L.pos < p.loop.end ? p.loop.end : Infinity);
@@ -524,7 +539,37 @@ L.engine = (() => {
     return trimmed;
   };
   E.render = async () => new Blob([L.wav(await E.renderBuffer())], { type: 'audio/wav' });
-  E.autoAt = (pts, beat) => E_autoAt(pts, beat);
+  E.autoAt = (pts, beat, def) => E_autoAt(pts, beat, def);
+  E.AUTO = AUTO;
+
+  // ---------- previews ----------
+  // Plays a throwaway project (a style preview) on a graph of its own, so the song and its mixer are untouched.
+  let pv = null;
+  E.preview = async (proj, onEnd, onStart) => {
+    E.stopPreview();
+    ensure();
+    if (E.playing) E.stop();
+    const me = pv = { onEnd };
+    await L.lib.ready(proj);
+    if (pv !== me) return;
+    if (onStart) onStart();
+    const g = me.g = makeGraph(ctx, proj), spb = 60 / proj.bpm, t0 = ctx.currentTime + 0.12;
+    const end = Math.max(...proj.tracks.flatMap(t => t.clips.map(c => c.start + c.len)));
+    scheduleRange(g, proj, 0, end + 1e-6, b => t0 + b * spb, Infinity);
+    scheduleAuto(g, proj, 0, b => t0 + b * spb, Infinity);
+    me.timer = setTimeout(() => { if (pv === me) E.stopPreview(); }, (end * spb + 1.2) * 1000);
+  };
+  E.stopPreview = () => {
+    const me = pv; if (!me) return;
+    pv = null; clearTimeout(me.timer);
+    if (me.g) {
+      for (const v of me.g.live) v.kill();
+      me.g.master.gain.setTargetAtTime(0, ctx.currentTime, 0.04);
+      setTimeout(() => { me.g.an.disconnect(); me.g.tracks.forEach(n => n.cLfo.stop()); }, 300);
+    }
+    if (me.onEnd) me.onEnd();
+  };
+  E.previewing = () => !!pv;
 
   L.on('change', E.reconcile);
   return E;
