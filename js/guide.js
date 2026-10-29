@@ -309,6 +309,9 @@ L.guide = (() => {
     if (!byId(view)) view = act ? act.id : STYLES[0].id;
     const s = byId(view), on = act === s, sc = new Set(P.SCALES[s.scale].map(x => (x + s.key) % 12));
     const chords = P.chordsFor(s.key, s.scale, 4, s.sev);
+    // rebuilding the panel would jump the lists back to the top
+    const keep = ['.g-side nav', '.g-main'].map(q => { const el = host.querySelector(q); return el ? el.scrollTop : 0; });
+    keep.push(host.scrollTop);
     host.innerHTML = `
       <div class="lib-side g-side"><nav>${nav(s, act)}</nav></div>
       <div class="lib-main g-main">
@@ -335,6 +338,8 @@ L.guide = (() => {
           </section>
         </div>
       </div>`;
+    ['.g-side nav', '.g-main'].forEach((q, i) => { host.querySelector(q).scrollTop = keep[i]; });
+    host.scrollTop = keep[2];
   }
 
   host.addEventListener('click', e => {
