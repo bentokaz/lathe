@@ -4,6 +4,6 @@
 // here, never the secret key; README.md has the steps. The anon key is meant to be public: the database
 // rules set up in the README make sure each person can only read and change their own songs.
 L.CLOUD = {
-  url: '',
-  key: '',
+  url: 'https://tvlgjkydgobrtmhdcjfp.supabase.co',
+  key: 'sb_publishable_PR8ge915pK04q466TrdjJQ_I6DJTWU0',
 };
