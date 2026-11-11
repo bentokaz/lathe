@@ -38,6 +38,8 @@ L.guide = (() => {
       ['gm:pad_2_warm|Chords', 'synth:Sub|Bass', 'gm:music_box|Melody', 'gm:choir_aahs|Colour', 'kit:Deep 808|Drums'], [[0, 5, 0, 4], [0, 3, 5, 4]]),
     S('club', 'Hip-hop and electronic', 'House', 'Kick on every beat, chord stabs between the beats, a bass line that bounces. Build it up by adding one part at a time.', 9, 'Minor', 124,
       ['synth:Stab|Chords', 'gm:synth_bass_1|Bass', 'synth:Pluck|Melody', 'gm:pad_3_polysynth|Colour', 'kit:Gated|Drums'], [[0, 5, 2, 6], [0, 3, 5, 4]], true),
+    S('breakcore', 'Hip-hop and electronic', 'Breakcore', 'Chopped-up breakbeats at full speed, sliced, stuttered and rolled so no two bars are the same, over a sad, dreamy pad and a growling bass. Keep the tune slow and simple and let the drums be the chaos.', 4, 'Minor', 180,
+      ['combo:Dream pad|Chords', 'synth:Reese|Bass', 'gm:acoustic_grand_piano|Melody', 'combo:Glass bells|Melody', 'gm:choir_aahs|Colour', 'kit:Tight|Drums'], [[0, 5, 3, 4], [5, 3, 0, 6]], true),
     S('trio', 'Jazz and soul', 'Late-night trio', 'Piano, upright bass and brushes. Walk the bass through the chord notes and play the tune a little behind the beat.', 10, 'Major', 110,
       ['gm:acoustic_grand_piano|Chords', 'gm:acoustic_bass|Bass', 'gm:muted_trumpet|Melody', 'gm:vibraphone|Colour', 'kit:Tight|Drums'], [[1, 4, 0, 5], [0, 5, 1, 4]], true),
     S('soul', 'Jazz and soul', 'Slow jam', 'Warm electric piano, a bass that slides and a tune full of small bends. Keep the drums soft and late.', 5, 'Dorian', 76,
@@ -88,7 +90,7 @@ L.guide = (() => {
       ['pluck:Steel-string acoustic|Chords', 'gm:acoustic_bass|Bass', 'gm:harmonica|Melody', 'gm:banjo|Colour', 'gm:fiddle|Colour'], [[0, 3, 4, 0], [0, 5, 3, 4]]),
   ];
   // Hand-ranked by how widely each kind of music is listened to; Lathe has no play counts to go on.
-  const RANK = 'pop trap lofi club boombap indie bedroom garage ballad neon dream uke folk soul chip heroic melancholy chase shoegaze trio tender battle wonder forest boss mystery room ice dunes water house bossa hold store weather'.split(' ');
+  const RANK = 'pop trap lofi club boombap indie bedroom garage ballad neon dream uke folk soul chip heroic melancholy chase shoegaze breakcore trio tender battle wonder forest boss mystery room ice dunes water house bossa hold store weather'.split(' ');
   STYLES.sort((a, b) => RANK.indexOf(a.id) - RANK.indexOf(b.id));
   const GENRES = [...new Set(STYLES.map(s => s.genre))];
   const byId = id => STYLES.find(s => s.id === id) || null;
@@ -166,6 +168,42 @@ L.guide = (() => {
     walk: () => [[0, 0.9, 0.85, 'r'], [1, 0.9, 0.7, '3'], [2, 0.9, 0.75, '5'], [3, 0.9, 0.7, 'n']],
     trap: v => [[[0, 1.4], [1.75, 0.5], [2.5, 1.4]], [[0, 2.5], [2.75, 1]], [[0, 0.7], [0.75, 0.7], [2, 1.9]]][Math.floor(v * 3)].map(([b, l]) => [b, l, 0.9, 'r']),
   };
+  // Breakcore drums: one-beat slices of a classic break, [sixteenth within the beat, drum, level].
+  // The first four, in order, play the break straight; every bar re-cuts them.
+  const SLICES = [
+    [[0, 36, 1], [0, 39, 0.5], [1, 39, 0.4], [2, 36, 0.9], [2, 39, 0.5], [3, 39, 0.4]],
+    [[0, 37, 0.95], [0, 39, 0.5], [1, 39, 0.4], [2, 39, 0.5], [3, 37, 0.5], [3, 39, 0.4]],
+    [[0, 39, 0.5], [1, 37, 0.55], [2, 36, 0.9], [2, 39, 0.5], [3, 36, 0.85], [3, 39, 0.4]],
+    [[0, 37, 0.95], [0, 39, 0.5], [1, 39, 0.4], [2, 39, 0.5], [3, 37, 0.6], [3, 39, 0.4]],
+    [[0, 36, 1], [0, 40, 0.45], [1, 37, 0.5], [2, 37, 0.85], [3, 39, 0.4]],
+    [[0, 36, 1], [1, 36, 0.7], [2, 37, 0.95], [3, 42, 0.5]],
+  ];
+  function breaks(R, bars, out) {
+    const chaos = 0.25 + R() * 0.35, hit = (s, p, v, l = 0.25) => out.push({ p, s, l, v: vel(v + (R() - 0.5) * 0.1) });
+    for (let bar = 0; bar < bars; bar++) {
+      for (let beat = 0; beat < 4; beat++) {
+        const at = bar * 4 + beat, r = R();
+        if (beat === 3 && (bar % 4 === 3 || bar === bars - 1) && R() < 0.8) {
+          // end of a phrase: a snare roll that speeds up and gets louder
+          for (let i = 0; i < 8; i++) hit(at + i / 8, i % 4 === 3 && R() < 0.4 ? 36 : 37, 0.45 + i * 0.07, 0.125);
+        } else if (r < chaos * 0.35) {
+          // stutter: one drum machine-gunned in 32nds or 16ths
+          const p = any(R, [37, 37, 36, 39]), n = R() < 0.6 ? 8 : 4, up = R() < 0.5;
+          for (let i = 0; i < n; i++) hit(at + i / n, p, up ? 0.4 + i * 0.6 / n : 0.95 - i * 0.5 / n, 1 / n);
+        } else if (r < chaos * 0.5) {
+          // repeat the first half of a slice
+          const sl = any(R, SLICES).filter(([i]) => i < 2);
+          for (const k of [0, 2]) sl.forEach(([i, p, v]) => hit(at + (i + k) / 4, p, v));
+        } else if (r < chaos * 0.58 && beat) {
+          hit(at, 36, 0.9); // drop out for a beat, leaving one kick
+        } else {
+          const sl = r < chaos ? any(R, SLICES) : SLICES[beat];
+          sl.forEach(([i, p, v]) => hit(at + i / 4, p, v));
+        }
+      }
+      if (bar % 4 === 0 && (bar || R() < 0.5)) hit(bar * 4, 43, 0.6, 0.5);
+    }
+  }
   const BAND = { dr: 'back', ch: ['hold', 'halves'], bs: ['roots'] }, STILL = { ch: ['hold', 'arp', 'halves'], bs: ['hold', 'roots'] };
   const FEEL = {
     dream: { dr: 'half', ch: ['hold', 'arp'], bs: ['hold', 'roots'] }, bedroom: { dr: 'boombap', ch: ['halves', 'stab'], bs: ['roots', 'synco'], sw: 0.15 },
@@ -174,7 +212,7 @@ L.guide = (() => {
     store: { dr: 'back', ch: ['offbeat', 'pulse'], bs: ['rootfifth'] }, weather: { dr: 'swing', ch: ['stab', 'halves'], bs: ['walk', 'rootfifth'], sw: 0.25 },
     garage: { dr: 'back', ch: ['eighths', 'pulse'], bs: ['eighths'] }, ballad: { dr: 'half', ch: ['hold', 'arp', 'halves'], bs: ['hold', 'roots'] },
     boombap: { dr: 'boombap', ch: ['stab', 'hold'], bs: ['synco', 'roots'], sw: 0.25 }, trap: { dr: 'trap', ch: ['hold', 'arp'], bs: ['trap'] },
-    club: { dr: 'four', ch: ['offbeat', 'stab'], bs: ['octave', 'offbass'] }, trio: { dr: 'swing', ch: ['stab', 'halves'], bs: ['walk'], sw: 0.33 },
+    club: { dr: 'four', ch: ['offbeat', 'stab'], bs: ['octave', 'offbass'] }, breakcore: { dr: 'break', ch: ['hold', 'arp', 'halves'], bs: ['hold', 'roots', 'synco'] }, trio: { dr: 'swing', ch: ['stab', 'halves'], bs: ['walk'], sw: 0.33 },
     soul: { dr: 'half', ch: ['hold', 'halves'], bs: ['synco', 'roots'], sw: 0.2 }, heroic: { ch: ['eighths', 'pulse'], bs: ['eighths', 'roots'] },
     battle: { ch: ['eighths'], bs: ['eighths'] }, dunes: { ch: ['hold', 'arp'], bs: ['roots'] }, chip: { dr: 'back', ch: ['arp', 'eighths'], bs: ['octave', 'eighths'] },
     forest: { ch: ['eighths', 'pulse'], bs: ['rootfifth'] }, boss: { dr: 'back', ch: ['eighths'], bs: ['eighths'] }, chase: { dr: 'four', ch: ['stab', 'hold'], bs: ['eighths', 'octave'] },
@@ -205,7 +243,8 @@ L.guide = (() => {
       for (const [b, l, v, k] of BASS[bass](bv)) bline.push({ p: iv[k], s: bar * 4 + swing(b), l, v: vel(0.8 * v + (R() - 0.5) * hum) });
     });
     const G = F.dr && GROOVES[F.dr];
-    if (G) {
+    if (F.dr === 'break') breaks(R, bars, drums);
+    else if (G) {
       const mine = G.map(x => any(R, x[2])), busy = 0.25 + R() * 0.4;
       for (let bar = 0; bar < bars; bar++) {
         const fill = bars >= 4 && bar % 4 === 3 && R() < 0.75;

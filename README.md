@@ -14,7 +14,7 @@ Made by bentokaz as a school project.
 - **Piano roll** with chord stamping, hover-a-note-to-make-a-chord, arpeggiate, quantize and velocity.
 - **On-screen keyboard** with chord pads and an arpeggiator. The computer keyboard and MIDI keyboards play it too.
 - **More than 150 sounds**: modelled guitars and ukulele, built-in synths, drum kits, and the 128 General MIDI instruments, which download the first time they are used.
-- **Styles** for 35 kinds of music, most popular first. A style sets the key, tempo and instruments and marks the notes and chords that fit. The play button gives an 8-bar preview, and **Write backing** writes chords, bass and drums that come out differently every time. **New variation** gives another take; the melody is up to you.
+- **Styles** for 36 kinds of music, most popular first. A style sets the key, tempo and instruments and marks the notes and chords that fit. The play button gives an 8-bar preview, and **Write backing** writes chords, bass and drums that come out differently every time. **New variation** gives another take; the melody is up to you.
 - **Mixer** with EQ, drive, compressor, chorus, delay and reverb, plus mute and solo.
 - **Automation** for volume, pan, filter, reverb and echo, drawn as a line on each track.
 - **Recording** of notes from the keyboard, or audio from a microphone.
