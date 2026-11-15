@@ -81,7 +81,8 @@ L.video = (() => {
       return L.toast('This browser cannot play that video file', 6000);
     }
     const old = meta();
-    L.project.video = { name: f.name, dur: el.duration, offset: old ? old.offset : 0, vol: old ? old.vol : 0.7, markers: old && old.name === f.name ? old.markers : [] };
+    // key: where the file is kept in an account
+    L.project.video = { name: f.name, key: L.uid(), dur: el.duration, offset: old ? old.offset : 0, vol: old ? old.vol : 0.7, markers: old && old.name === f.name ? old.markers : [] };
     L.commit();
     L.toast(`${f.name} added (${fmt(el.duration)}). Press play: the picture follows the playhead`, 5000);
   }
@@ -90,10 +91,19 @@ L.video = (() => {
     L.idbDel('vid', 'cur').catch(() => {});
     L.commit();
   }
-  // Called at start-up: picks the stored file back up if the project still refers to it.
+  // Called before a song opens: picks up its video from this browser, or else from the account it was saved to.
   async function restore(p) {
     if (!p.video) return;
-    try { const rec = await L.idbGet('vid', 'cur'); if (rec && rec.name === p.video.name) file = rec.blob; } catch { /* no stored video */ }
+    let f = null;
+    try { const rec = await L.idbGet('vid', 'cur'); if (rec && rec.name === p.video.name) f = rec.blob; } catch { /* no stored video */ }
+    if (!f && p.video.key && L.cloud && L.cloud.user()) {
+      L.toast('Downloading the video for ' + (p.name || 'this song') + '…', 0);
+      f = await L.cloud.fetchVideo(p.video.key);
+      L.toast(f ? '' : 'The video for this song is not in your account; add the file again from this computer', f ? 0 : 7000);
+      if (f) L.idbPut('vid', 'cur', { blob: f, name: p.video.name }).catch(() => {});
+    }
+    // a different song's video may be on screen: swap it
+    if (f !== file) { detach(); file = f; }
   }
   function sync() {
     const m = meta();
@@ -109,13 +119,14 @@ L.video = (() => {
     mon.hidden = !m;
     if (!m) return;
     if (!mon.firstChild) {
-      mon.innerHTML = `<div class="mon-v"></div>
-        <div class="mon-bar"><b></b><button class="ib" data-v="mark" title="Drop a marker at the playhead, to line music up with a moment" aria-label="Add marker">${L.icon('flag')}</button><button class="ib" data-v="del" title="Remove the video" aria-label="Remove video">${L.icon('trash')}</button></div>
+      mon.innerHTML = `<div class="mon-v"><div class="mon-pic"></div>
+          <div class="mon-fs"><button data-v="pp" aria-label="Play or pause"></button><button data-v="restart" title="From the start of the video" aria-label="From the start">${L.icon('back')}</button><span class="mon-time"></span><small>Space plays and pauses. Esc comes back</small><button data-v="exit" title="Leave full screen" aria-label="Leave full screen">${L.icon('full')}</button></div></div>
+        <div class="mon-bar"><b></b><button class="ib" data-v="full" title="Watch full screen with your music (Esc to come back)" aria-label="Watch full screen">${L.icon('full')}</button><button class="ib" data-v="mark" title="Drop a marker at the playhead, to line music up with a moment" aria-label="Add marker">${L.icon('flag')}</button><button class="ib" data-v="del" title="Remove the video" aria-label="Remove video">${L.icon('trash')}</button></div>
         <label class="prm"><span>Film sound</span><input type="range" data-v="vol" min="0" max="1.5" step="0.01"><output></output></label>
         <label class="prm"><span>Starts at</span><input type="number" data-v="offset" step="0.1"><output>sec</output></label>
         <button class="mon-miss" data-v="find" hidden>Find the video file again</button>`;
     }
-    const box = mon.querySelector('.mon-v');
+    const box = mon.querySelector('.mon-pic');
     if (el && el.parentElement !== box) box.replaceChildren(el);
     if (!el) box.replaceChildren();
     mon.querySelector('.mon-bar b').textContent = m.name;
@@ -138,6 +149,10 @@ L.video = (() => {
   mon.addEventListener('click', e => {
     const b = e.target.closest('button[data-v]'), m = meta(); if (!b || !m) return;
     if (b.dataset.v === 'del') remove();
+    else if (b.dataset.v === 'full') full(true);
+    else if (b.dataset.v === 'exit') full(false);
+    else if (b.dataset.v === 'pp') E.toggle();
+    else if (b.dataset.v === 'restart') E.seek(Math.max(0, m.offset) / L.spb());
     else if (b.dataset.v === 'find') $('#f-video').click();
     else if (b.dataset.v === 'mark') {
       const t = L.pos * L.spb() - m.offset;
@@ -147,6 +162,43 @@ L.video = (() => {
       L.commit();
     }
   });
+
+  // ---------- full screen: just the picture and the music ----------
+  let fsUI = null, idle = 0, fsPlaying = null;
+  const isFull = () => !!fsUI && fsUI.classList.contains('full');
+  function full(on) {
+    const m = meta(); fsUI = mon.querySelector('.mon-v');
+    if (on) {
+      if (!m || !el) return L.toast('The video file is missing; find it again first');
+      // start from the top of the video unless the playhead is already inside it
+      const want = L.pos * L.spb() - m.offset;
+      if (want < 0 || want >= m.dur - 0.1) E.seek(Math.max(0, m.offset) / L.spb());
+      fsUI.classList.add('full');
+      if (fsUI.requestFullscreen) fsUI.requestFullscreen().catch(() => {});
+      fsPlaying = null; wake();
+      if (!E.playing) E.play();
+    } else {
+      if (!fsUI || !isFull()) return;
+      fsUI.classList.remove('full');
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      if (E.playing) E.stop();
+    }
+  }
+  // the controls fade away while watching and come back when the mouse moves
+  function wake() {
+    if (!isFull()) return;
+    fsUI.classList.remove('idle'); clearTimeout(idle);
+    idle = setTimeout(() => { if (E.playing) fsUI.classList.add('idle'); }, 2500);
+  }
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) full(false); });
+  mon.addEventListener('pointermove', wake);
+  addEventListener('keydown', e => { if (e.key === 'Escape' && isFull()) full(false); else if (isFull()) wake(); });
+  function fsTick(want) {
+    const m = meta();
+    if (E.playing !== fsPlaying) { fsPlaying = E.playing; fsUI.querySelector('[data-v="pp"]').innerHTML = L.icon(fsPlaying ? 'pause' : 'play'); if (!fsPlaying) wake(); }
+    fsUI.querySelector('.mon-time').textContent = fmt(clamp(want, 0, m.dur)) + ' / ' + fmt(m.dur);
+    if (E.playing && want > m.dur + 0.3) E.stop(); // the film is over
+  }
 
   // ---------- lane in the timeline ----------
   function lane() {
@@ -192,6 +244,7 @@ L.video = (() => {
       if (inside && !el.seeking && Math.abs(el.currentTime - want) > 0.04) el.currentTime = want;
     }
     el.style.opacity = inside ? 1 : 0.12;
+    if (isFull()) fsTick(want);
     lastPos = pos;
   }
 

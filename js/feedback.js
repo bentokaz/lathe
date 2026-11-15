@@ -1,9 +1,11 @@
 'use strict';
-// Feedback and bug reports. A static site has no server to receive them, so the report is written here
-// and handed to GitHub as a ready-filled issue (posting needs a free GitHub account); it can also be copied.
+// Feedback and bug reports. With accounts set up (config.js) a report goes straight into the feedback table,
+// which anyone can add to but only the owner of the Supabase project can read; no sign-in needed.
+// Otherwise, or if that fails, it is handed to GitHub as a ready-filled issue, and it can always be copied.
 L.feedback = (() => {
   const { $, esc } = L;
-  const REPO = 'bentokaz/lathe', VERSION = '2026.10.28';
+  const REPO = 'bentokaz/lathe', VERSION = '2026.11.15';
+  const C = L.CLOUD || {}, direct = !!(C.url && C.key);
   const errors = [];
 
   // remember the last few things that went wrong, so a bug report can include them
@@ -22,7 +24,7 @@ L.feedback = (() => {
     idea: { label: 'An idea or request', prompt: 'What would you like Lathe to do?' },
     other: { label: 'Something else', prompt: 'Tell us anything.' },
   };
-  let kind = 'bug';
+  let kind = 'bug', contact = '', sending = false;
 
   function details() {
     const p = L.project, n = navigator;
@@ -49,13 +51,16 @@ L.feedback = (() => {
   document.body.append(dlg);
   function draw() {
     const text = dlg.querySelector('textarea')?.value || '';
+    contact = dlg.querySelector('.fb-contact')?.value || contact;
     dlg.innerHTML = `<h2>Send feedback</h2>
       <div class="fb-kinds">${Object.entries(KINDS).map(([k, v]) => `<button type="button" data-k="${k}" class="${k === kind ? 'on' : ''}">${v.label}</button>`).join('')}</div>
       <textarea rows="6" placeholder="${KINDS[kind].prompt}" spellcheck="true"></textarea>
       <label class="fb-check"><input type="checkbox" id="fb-info" checked> Include technical details <small>(browser, project size, recent errors; no audio, no song content)</small></label>
       <details class="fb-peek"><summary>See exactly what is included</summary><pre>${esc(details())}</pre></details>
-      <p class="fb-how">Sending opens a ready-filled report on GitHub; press <b>Submit new issue</b> there to post it. Posting needs a free GitHub account. No account? Use <b>Copy report</b> and send it however suits you.</p>
-      <div class="fb-foot"><button type="button" data-a="close">Cancel</button><button type="button" data-a="copy">Copy report</button><button type="button" data-a="send" class="strong">Send on GitHub</button></div>`;
+      ${direct ? `<input class="fb-contact" maxlength="200" placeholder="Your name or email, only if you would like a reply (optional)" value="${esc(contact)}">
+      <p class="fb-how">Goes straight to the maker of Lathe. No account needed. Or <button type="button" class="link" data-a="gh">post it on GitHub</button> instead.</p>`
+      : '<p class="fb-how">Sending opens a ready-filled report on GitHub; press <b>Submit new issue</b> there to post it. Posting needs a free GitHub account. No account? Use <b>Copy report</b> and send it however suits you.</p>'}
+      <div class="fb-foot"><button type="button" data-a="close">Cancel</button><button type="button" data-a="copy">Copy report</button><button type="button" data-a="${direct ? 'send' : 'gh'}" class="strong">${direct ? 'Send' : 'Send on GitHub'}</button></div>`;
     dlg.querySelector('textarea').value = text;
   }
   function open(k) {
@@ -71,6 +76,26 @@ L.feedback = (() => {
     if (!dlg.querySelector('textarea').value.trim()) { dlg.querySelector('textarea').focus(); return L.toast('Write a line or two first'); }
     if (a === 'copy') {
       try { await navigator.clipboard.writeText(`${title()}\n\n${report()}`); L.toast('Report copied'); } catch { L.toast('Could not reach the clipboard; select the text and copy it instead'); }
+      return;
+    }
+    if (a === 'send') {
+      if (sending) return;
+      sending = true; b.textContent = 'Sending…';
+      contact = dlg.querySelector('.fb-contact').value.trim();
+      try {
+        const r = await fetch(C.url + '/rest/v1/feedback', {
+          method: 'POST',
+          headers: { apikey: C.key, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ kind, message: dlg.querySelector('textarea').value.trim().slice(0, 5000), contact: contact.slice(0, 200) || null, details: dlg.querySelector('#fb-info').checked ? details().slice(0, 4000) : null }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        dlg.querySelector('textarea').value = ''; contact = ''; dlg.close();
+        L.toast('Thanks! Your feedback was sent', 6000);
+      } catch (err) {
+        L.toast('Could not send it just now (' + err.message + '). Try again, or post it on GitHub', 7000);
+        b.textContent = 'Send';
+      }
+      sending = false;
       return;
     }
     // GitHub reads the title and body from the address; keep it well under its length limit

@@ -101,10 +101,8 @@ L.panels = (() => {
     if (a === 'browse') return L.showTab('sounds');
     if (a === 'up' && i > 0) [ts[i - 1], ts[i]] = [ts[i], ts[i - 1]];
     else if (a === 'down' && i < ts.length - 1) [ts[i + 1], ts[i]] = [ts[i], ts[i + 1]];
-    else if (a === 'dup') {
-      const c = JSON.parse(JSON.stringify(t)); c.id = L.uid(); c.name += ' copy'; c.clips.forEach(x => { x.id = L.uid(); });
-      ts.splice(i + 1, 0, c); L.sel.track = c.id; L.sel.clip = null;
-    } else if (a === 'del') return L.arr.delTrack(t);
+    else if (a === 'dup') return L.arr.dupTrack(t);
+    else if (a === 'del') return L.arr.delTrack(t);
     else return;
     L.commit();
   });

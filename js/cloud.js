@@ -68,7 +68,8 @@ L.cloud = (() => {
         up.add(id);
         try { localStorage.setItem(upKey(), JSON.stringify([...up])); } catch { /* storage full */ }
       }
-      const data = JSON.parse(JSON.stringify(p)); delete data.video;
+      if (p.video && !p.video.key) p.video.key = L.uid();
+      const data = JSON.parse(JSON.stringify(p));
       let { error } = await c.from('songs').upsert({ id: p.id, name: p.name, data, updated_at: new Date().toISOString() });
       // someone else's song with the same id (opened from their project file): save this as a new song
       if (error && (error.code === '42501' || /row-level security/i.test(error.message))) {
@@ -76,6 +77,7 @@ L.cloud = (() => {
         ({ error } = await c.from('songs').upsert({ id: p.id, name: p.name, data: { ...data, id: p.id }, updated_at: new Date().toISOString() }));
       }
       if (error) throw error;
+      await upVideo(c, p, up);
       failed = false;
     } catch (err) {
       failed = true; dirty = true;
@@ -83,6 +85,48 @@ L.cloud = (() => {
     }
     busy = false; status();
     if (dirty && !failed) sync();
+  }
+
+  // The song's video goes up once (after the song itself, which is quick). The free plan takes files up to 50 MB,
+  // so a bigger video is shrunk into a smaller copy for the account; this browser keeps the original.
+  // Videos share the per-person folders of the audio bucket.
+  const MAXV = 48e6, tooBig = new Set();
+  async function upVideo(c, p, up) {
+    const v = p.video, f = L.video.file();
+    if (!v || !f || !v.key) return;
+    const k = 'video-' + v.key;
+    if (up.has(k) || tooBig.has(k)) return;
+    let blob = f;
+    if (f.size > MAXV) {
+      L.toast('Making a smaller copy of the video to keep in your account…', 0);
+      try { blob = await shrink(f, v.dur); } catch { blob = null; }
+      L.toast('');
+    }
+    let error = !blob || blob.size > 50e6 ? { message: 'too large' } : (await c.storage.from('audio').upload(`${user.id}/${k}`, blob, { contentType: blob.type || 'video/mp4', upsert: false })).error;
+    if (error && /exist|duplicate/i.test(error.message)) error = null;
+    if (error && /large|size|exceed|413/i.test(error.message + (error.statusCode || ''))) {
+      tooBig.add(k);
+      return L.toast('This video is too long to keep in your account, so it stays in this browser only. The music is saved online as normal', 8000);
+    }
+    if (error) throw error;
+    up.add(k);
+    try { localStorage.setItem(upKey(), JSON.stringify([...up])); } catch { /* storage full */ }
+  }
+  async function shrink(f, dur) {
+    const M = await L.exporter.lib();
+    const input = new M.Input({ source: new M.BlobSource(f), formats: M.ALL_FORMATS });
+    const output = new M.Output({ format: new M.Mp4OutputFormat({ fastStart: 'in-memory' }), target: new M.BufferTarget() });
+    const vt = await input.getPrimaryVideoTrack(), wide = vt && vt.displayWidth > 1280;
+    const bitrate = Math.max(250e3, Math.floor(MAXV * 8 * 0.85 / Math.max(1, dur)) - 128e3);
+    const conv = await M.Conversion.init({ input, output, video: { codec: 'avc', bitrate, forceTranscode: true, ...(wide ? { width: 1280 } : {}) }, audio: { codec: 'aac', bitrate: 96e3 } });
+    if (!conv.isValid) throw new Error('cannot convert');
+    conv.onProgress = pr => L.toast(`Making a smaller copy of the video to keep in your account… ${Math.round(pr * 100)}%`, 0);
+    await conv.execute();
+    return new Blob([output.target.buffer], { type: 'video/mp4' });
+  }
+  async function fetchVideo(key) {
+    if (!user) return null;
+    try { const r = await (await client()).storage.from('audio').download(`${user.id}/video-${key}`); return r.data || null; } catch { return null; }
   }
 
   async function cloudList() {
@@ -242,5 +286,5 @@ L.cloud = (() => {
 
   status();
   start();
-  return { open, newSong, enabled, user: () => user };
+  return { open, newSong, fetchVideo, enabled, user: () => user };
 })();

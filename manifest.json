@@ -1,7 +1,8 @@
 {
   "name": "Lathe",
   "short_name": "Lathe",
-  "description": "Make music in your browser: write, record, mix and score to video.",
+  "description": "A music production studio (DAW) in the browser: compose, record, mix and score film. Made as a school music project.",
+  "categories": ["music", "education", "productivity"],
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -89,7 +89,8 @@
   // ---- selection, view ----
   L.project = null;
   L.buffers = new Map();
-  L.sel = { track: null, clip: null, notes: new Set() };
+  // more: other clips selected along with clip (shift-click or a box in the timeline); only counts while moreFor is still the selected clip
+  L.sel = { track: null, clip: null, notes: new Set(), more: new Set(), moreFor: null };
   L.view = { ppb: 28, snap: 1, eppb: 72, esnap: 0.25, oct: 4, vel: 0.8, stamp: 'Off' };
   L.pos = 0;
   L.focus = 'arr';
@@ -104,14 +105,23 @@
   L.spb = () => 60 / L.project.bpm;
 
   L.select = (track, clip = null) => {
-    if (L.sel.track === track && L.sel.clip === clip) return;
-    L.sel.track = track; L.sel.clip = clip; L.sel.notes.clear();
+    if (L.sel.track === track && L.sel.clip === clip && !L.sel.more.size) return;
+    L.sel.track = track; L.sel.clip = clip; L.sel.notes.clear(); L.sel.more.clear();
     L.emit('sel');
   };
 
   const fixSel = () => {
     if (!L.trackById(L.sel.track)) L.sel.track = L.project.tracks[0]?.id || null;
     if (!L.clipById(L.sel.clip)) L.sel.clip = null;
+    for (const id of L.sel.more) if (!L.clipById(id)) L.sel.more.delete(id);
+  };
+  // every selected clip, the main one first
+  L.selClips = () => !L.sel.clip ? [] : [L.sel.clip, ...(L.sel.moreFor === L.sel.clip ? [...L.sel.more].filter(id => id !== L.sel.clip) : [])].map(L.clipById).filter(Boolean);
+  L.selectClips = (ids, main = ids[0]) => {
+    const r = L.clipById(main);
+    L.sel.clip = r ? main : null; L.sel.track = r ? r.track.id : L.sel.track; L.sel.notes.clear();
+    L.sel.more = new Set(ids.filter(id => id !== main)); L.sel.moreFor = L.sel.clip;
+    L.emit('sel');
   };
 
   // ---- history: whole-project snapshots ----

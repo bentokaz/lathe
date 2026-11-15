@@ -10,7 +10,7 @@ Made by bentokaz as a school project.
 
 ## What it does
 
-- **Timeline** with synth, drum and audio tracks. Clips can be moved, trimmed, split, copied and looped by dragging their corner.
+- **Timeline** with synth, drum and audio tracks. Clips can be moved, trimmed, split, copied and looped by dragging their corner. Select several with Shift-click, by dragging a box across empty space, or with Ctrl+A, then move, copy or delete them together. Tracks can be duplicated.
 - **Piano roll** with chord stamping, hover-a-note-to-make-a-chord, arpeggiate, quantize and velocity.
 - **On-screen keyboard** with chord pads and an arpeggiator. The computer keyboard and MIDI keyboards play it too.
 - **More than 150 sounds**: modelled guitars and ukulele, built-in synths, drum kits, and the 128 General MIDI instruments, which download the first time they are used.
@@ -29,8 +29,9 @@ Made by bentokaz as a school project.
   - the video with your music: MP4, MOV, WebM or MKV.
 
   Exports render faster than real time.
-- **Video scoring**: add a film, drop markers on the moments to hit, and export the film with the music.
-- **My songs**: every song is kept in the browser, with an optional account to open them anywhere. A share link gives a friend their own copy.
+- **Video scoring**: add a film, drop markers on the moments to hit, watch it full screen with the music, and export the film with the music.
+- **My songs**: every song is kept in the browser, with an optional account to open them anywhere (videos included). A share link gives a friend their own copy.
+- **Feedback** from the button in the top bar, without signing in to anything.
 - **Tutorial**: 16 steps (gear menu, or the start screen).
 - **14 colour themes** (gear menu).
 
@@ -82,11 +83,24 @@ insert into storage.buckets (id, name, public) values ('audio', 'audio', false) 
 create policy "Own audio only" on storage.objects for all to authenticated
   using (bucket_id = 'audio' and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id = 'audio' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Feedback: anyone can send it, only the project owner reads it (Table Editor, feedback)
+create table public.feedback (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  kind text not null check (kind in ('bug', 'idea', 'other')),
+  message text not null check (char_length(message) between 1 and 5000),
+  contact text check (char_length(contact) <= 200),
+  details text check (char_length(details) <= 4000)
+);
+alter table public.feedback enable row level security;
+create policy "Anyone can send feedback" on public.feedback for insert to anon, authenticated with check (true);
+grant insert on public.feedback to anon, authenticated;
 ```
 
 An account stores only an email address, a password (handled by Supabase, never seen by Lathe) and the songs.
 
-Video is not uploaded. It stays on the computer it was added on.
+A song's video goes into the account too. The free plan takes files up to 50 MB, so a bigger video is shrunk to a smaller copy for the account; the computer it was added on keeps the original. Feedback sent from the app appears in **Table Editor, feedback**.
 
 ## Credits
 

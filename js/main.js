@@ -127,6 +127,7 @@
       else if (!ed && k === 'd') L.arr.dup();
       else if (!ed && k === 'c') L.arr.copy();
       else if (!ed && k === 'v') L.arr.paste();
+      else if (!ed && k === 'a') L.arr.all();
       else return;
       e.preventDefault(); return;
     }
