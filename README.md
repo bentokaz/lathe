@@ -11,9 +11,10 @@ Made by bentokaz as a school project.
 ## What it does
 
 - **Timeline** with synth, drum and audio tracks. Clips can be moved, trimmed, split, copied and looped by dragging their corner. Select several with Shift-click, by dragging a box across empty space, or with Ctrl+A, then move, copy or delete them together. Tracks can be duplicated.
-- **Piano roll** with chord stamping, hover-a-note-to-make-a-chord, arpeggiate, quantize and velocity.
+- **Piano roll** with chord stamping, hover-a-note-to-make-a-chord, arpeggiate, quantize, humanize (small random nudges to timing and loudness, so parts sound played) and velocity.
 - **On-screen keyboard** with chord pads and an arpeggiator. The computer keyboard and MIDI keyboards play it too.
-- **More than 150 sounds**: modelled guitars and ukulele, built-in synths, drum kits, and the 128 General MIDI instruments, which download the first time they are used.
+- **More than 150 sounds**: modelled guitars and ukulele, built-in synths, recorded drum kits and drum machines, and the 128 General MIDI instruments, which download the first time they are used.
+- **Sound effects, loops and fills**: risers, a reverse cymbal, impacts, sub drops, a downlifter, whooshes and vinyl crackle, made to fit the song's tempo, plus drum loops (rock, house, boom bap, trap, breakbeat, bossa nova and more) and fills. One click puts them at the playhead; build-ups end there, so they lead into the drop.
 - **Styles** for 36 kinds of music, most popular first. A style sets the key, tempo and instruments and marks the notes and chords that fit. The play button gives an 8-bar preview, and **Write backing** writes chords, bass and drums that come out differently every time. **New variation** gives another take; the melody is up to you.
 - **Mixer** with EQ, drive, compressor, chorus, delay and reverb, plus mute and solo.
 - **Automation** for volume, pan, filter, reverb and echo, drawn as a line on each track.
@@ -112,7 +113,7 @@ A song's video goes into the account too. The free plan takes files up to 50 MB,
 | B | FatBoy | CC BY-SA 3.0 |
 | C | FluidR3 GM | CC BY 3.0 |
 
-The guitars, ukulele, synths and drum kits are generated in the browser, so they use no recordings.
+The recorded drum kits (Standard, Tight, Low and slow, Bright, Roomy) use the GM kit from the [Hydrogen](https://github.com/hydrogen-music/hydrogen) drum machine (GPL), streamed from [smpldsnds/hydrogen-drum-samples](https://github.com/smpldsnds/hydrogen-drum-samples). The guitars, ukulele, synths, drum machines and sound effects are generated in the browser, so they use no recordings.
 
 **Libraries:**
 

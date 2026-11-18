@@ -67,7 +67,7 @@ L.panels = (() => {
         <div class="prm sel2"><span>Osc 2</span>${sel('o2', t.inst.o2, WAVES)}</div>
         ${SYNTH.map(d => row(t, d)).join('')}`;
     } else if (t.type === 'drums') {
-      inst = `${sound}<p class="i-note">Eight synthesised voices: ${L.DRUMS.join(', ').toLowerCase()}.</p>${KIT.map(d => row(t, d)).join('')}`;
+      inst = `${sound}<p class="i-note">${L.lib.acoustic(t.inst.preset) ? "Recordings of a real drum kit, played harder or softer with each hit's velocity" : "A drum machine made from oscillators and noise"}: ${L.DRUMS.join(', ').toLowerCase()}.</p>${KIT.map(d => row(t, d)).join('')}`;
     } else inst = '<p class="i-note">Records from the microphone when this track is selected and you press record. Drop audio files on its lane to import them.</p>';
 
     insp.innerHTML = `

@@ -59,7 +59,7 @@ L.guide = (() => {
     S('dunes', 'Video game soundtrack', 'Sand dunes', 'Desert level. The second note of this scale sits right next to the home note; sliding between them gives the sound.', 4, 'Phrygian dominant', 98,
       ['gm:string_ensemble_1|Chords', 'gm:acoustic_bass|Bass', 'gm:sitar|Melody', 'gm:shanai|Melody', 'gm:kalimba|Colour', 'gm:taiko_drum|Colour'], [[0, 1, 0, 6], [0, 3, 1, 0]]),
     S('chip', 'Video game soundtrack', '8-bit overworld', 'Square waves and a bouncing bass. Keep melodies quick and catchy, arpeggios everywhere.', 0, 'Major', 140,
-      ['gm:lead_2_sawtooth|Chords', 'gm:synth_bass_1|Bass', 'gm:lead_1_square|Melody', 'synth:Chip|Melody', 'kit:Tight|Drums'], [[0, 4, 5, 3], [0, 3, 4, 0]]),
+      ['gm:lead_2_sawtooth|Chords', 'gm:synth_bass_1|Bass', 'gm:lead_1_square|Melody', 'synth:Chip|Melody', 'kit:Bedroom machine|Drums'], [[0, 4, 5, 3], [0, 3, 4, 0]]),
     S('forest', 'Video game soundtrack', 'Forest village', 'Friendly and a bit folky. A flute tune over strummed guitar.', 7, 'Mixolydian', 104,
       ['pluck:Nylon guitar|Chords', 'gm:acoustic_bass|Bass', 'gm:flute|Melody', 'gm:ocarina|Melody', 'gm:orchestral_harp|Colour'], [[0, 6, 3, 0], [0, 3, 6, 3]]),
     S('ice', 'Video game soundtrack', 'Ice cavern', 'Glassy bells over a cold pad. High, slow, lots of echo.', 9, 'Dorian', 78,

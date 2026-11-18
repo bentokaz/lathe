@@ -62,7 +62,7 @@ L.ed = (() => {
         <span class="lbl">Length</span><span class="stepper"><button data-a="len-">−</button><b class="ed-len"></b><button data-a="len+">+</button></span>
         <button data-a="unroll" hidden title="Turn the repeats into real notes you can change one by one"></button>
         <span class="lbl">Grid</span><select class="ed-snap">${opt(1, '1/4')}${opt(0.5, '1/8')}${opt(0.25, '1/16')}${opt(0.125, '1/32')}${opt(1 / 3, '1/8 T')}${opt(0, 'Off')}</select>
-        <button data-a="quant" title="Q">Quantize</button>
+        <button data-a="quant" title="Q">Quantize</button><button data-a="human" title="Nudge each note's timing and loudness a little, like a person playing. Press again for more">Humanize</button>
         ${drums ? '' : `<span class="lbl">Click draws</span><select class="ed-chord"><option value="Off">A single note</option>${Object.keys(L.CHORDS).map(k => `<option${k === L.view.stamp ? ' selected' : ''}>${k}</option>`).join('')}</select><button data-a="arp" title="Turn the selected notes into an arpeggio at the grid speed">Arpeggiate</button>`}
         ${drums ? '' : '<button data-a="oct-">Oct −</button><button data-a="oct+">Oct +</button>'}
         <span class="ed-hint">Hover a note to make it a chord, drag either end to resize, right-click erases, Shift-drag selects</span>
@@ -299,6 +299,16 @@ L.ed = (() => {
       S.clear(); out.forEach(n => S.add(n));
     }
     else if (a === 'quant') { if (!sn()) return; pool.forEach(n => { n.s = Math.max(0, q(n.s)); }); }
+    else if (a === 'human') {
+      // small random pushes, mostly tiny and now and then a bit more (two dice added), so it sounds played rather than shaken
+      const wob = () => (Math.random() + Math.random() - 1);
+      const end = cl(r.clip);
+      pool.forEach(n => {
+        n.s = L.clamp(n.s + wob() * 0.03, 0, end - 0.01);
+        n.v = +L.clamp(n.v + wob() * 0.14, 0.12, 1).toFixed(3);
+      });
+      L.toast('Humanized ' + pool.length + (pool.length === 1 ? ' note' : ' notes') + (L.sel.notes.size ? '' : ' (select some notes first to change only those)'), 2500);
+    }
     else if (a === 'oct+' || a === 'oct-') {
       const d = a === 'oct+' ? 12 : -12;
       if (pool.some(n => n.p + d > P_HI || n.p + d < P_LO)) return;

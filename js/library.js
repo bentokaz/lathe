@@ -26,9 +26,17 @@ L.lib = (() => {
     ['Textures', 'fx_1_rain fx_2_soundtrack fx_3_crystal fx_4_atmosphere fx_5_brightness fx_6_goblins fx_7_echoes fx_8_scifi'],
     ['World', 'sitar banjo shamisen koto kalimba bagpipe fiddle shanai'],
     ['Tuned percussion', 'tinkle_bell agogo steel_drums woodblock taiko_drum melodic_tom synth_drum reverse_cymbal'],
-    ['Sound effects', 'guitar_fret_noise breath_noise seashore bird_tweet telephone_ring helicopter applause gunshot'],
+    ['Sampled sound effects', 'guitar_fret_noise breath_noise seashore bird_tweet telephone_ring helicopter applause gunshot'],
   ];
-  const KITS = [['Standard', 0, 1], ['Deep 808', -5, 1.7], ['Tight', 3, 0.6], ['Low and slow', -9, 1.3], ['Bright', 6, 0.85], ['Gated', 0, 0.42], ['Roomy', -2, 1.45], ['Bedroom machine', 2, 0.55]];
+  const KITS = [['Standard', 0, 1], ['Tight', 3, 0.6], ['Low and slow', -9, 1.3], ['Bright', 6, 0.85], ['Roomy', -2, 1.45],
+    ['Drum machine', 0, 1], ['Deep 808', -5, 1.7], ['Gated', 0, 0.42], ['Bedroom machine', 2, 0.55]];
+  // Kits played from recordings of a real drum kit (Hydrogen's GM kit, five strengths of hit per drum).
+  // The others are drum machines made from oscillators and noise.
+  // lp/hs: a low-pass or high-shelf on every hit; room: reverb switched on when the kit is picked.
+  const ACOUSTIC = { Standard: {}, Tight: {}, 'Low and slow': { lp: 4200 }, Bright: { hs: 5 }, Roomy: { room: true } };
+  const DKIT = 'https://smpldsnds.github.io/hydrogen-drum-samples/', LAYERS = ['Softest', 'Soft', 'Med', 'Hard', 'Hardest'];
+  // one per drum lane: Kick, Snare, Clap, Hat, Open hat, Tom, Rim, Crash
+  const DFILES = [['h2ogmbd/Kick', 5], ['h2ogmsn/Snare', 5], ['h2ogmcp/HandClap', 1], ['h2ogmhh/HatClosed', 5], ['h2ogmhh/HatOpen', 5], ['h2ogmmt/Tom2', 5], ['h2ogmsn/SideStick', 5], ['h2ogmcy/Crash', 5]];
   // Ready-made sounds: a library instrument plus the effects that make it what it is.
   // Plucked-string models: bright = pick vs finger, decay = ring time (s), pos = where along the string,
   // body = main wooden-body resonance (Hz, 0 for solid electric), tone = final low-pass, strum = gap between strings (s).
@@ -61,6 +69,7 @@ L.lib = (() => {
     { name: 'Built-in synth', items: Object.keys(L.PRESETS).map(k => ({ kind: 'synth', label: k })) },
     { name: 'Indie and dream pop', items: COMBOS.map(([label, base, inst, fx]) => ({ kind: 'combo', label, base, inst, fx })) },
     { name: 'Drum kits', items: KITS.map(([label, tune, decay]) => ({ kind: 'kit', label, tune, decay })) },
+    ...L.sfx.items(),
     ...GM.map(([name, list]) => ({ name, items: list.split(' ').map(n => ({ kind: 'gm', name: n, label: nice(n) })) })),
   ];
   const TOTAL = ALL.reduce((n, c) => n + c.items.length, 0);
@@ -156,9 +165,43 @@ L.lib = (() => {
     for (const k of s.keys) if (Math.abs(k - pitch) < Math.abs(base - pitch)) base = k;
     return { buf: s.bufs.get(base), base, norm: s.norm, ...s.meta.get(base) };
   }
+  // ---------- recorded drum kit ----------
+  let kit = null; // { ready, bufs: [lane][strength], norm, promise }
+  function loadKit() {
+    if (kit) return kit.promise;
+    const k = kit = { ready: false, bufs: [], norm: 1 };
+    L.emit('loading', ++pending);
+    k.promise = (async () => {
+      try {
+        const get = async name => L.engine.decode(await (await fetch(DKIT + name + '.m4a')).arrayBuffer());
+        k.bufs = await Promise.all(DFILES.map(([f, n]) => Promise.all((n === 1 ? [''] : LAYERS).map(l => get(f + (l && '-' + l))))));
+        // one level for the whole kit, so the drums keep their balance with each other
+        let pk = 0;
+        for (const b of k.bufs.flat()) { const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i])); }
+        k.norm = pk ? 0.9 / pk : 1;
+        k.ready = true;
+        return true;
+      } catch {
+        kit = null;
+        L.toast('Could not load the recorded drums (they need an internet connection), so a drum machine plays instead', 6000);
+        return false;
+      }
+    })();
+    k.promise.finally(() => L.emit('loading', --pending));
+    return k.promise;
+  }
+  // The recording for one hit: harder hits use a harder-struck recording, not just a louder one.
+  function drum(lane, vel) {
+    if (!kit || !kit.ready) { loadKit(); return null; }
+    const set = kit.bufs[lane], i = set.length === 1 ? 0 : L.clamp(Math.round((vel - 0.25) / 0.75 * 4), 0, 4);
+    return { buf: set[i], gain: kit.norm };
+  }
+  const acoustic = preset => ACOUSTIC[preset] || null;
+  const needsKit = p => p.tracks.some(t => t.type === 'drums' && t.inst && ACOUSTIC[t.inst.preset]);
+
   const used = p => p.tracks.filter(t => t.inst && t.inst.sf).map(t => [t.inst.sf, t.inst.font]);
-  const ensure = p => used(p).forEach(([n, f]) => load(n, f));
-  const ready = p => Promise.all(used(p).map(([n, f]) => load(n, f)));
+  const ensure = p => { used(p).forEach(([n, f]) => load(n, f)); if (needsKit(p)) loadKit(); };
+  const ready = p => Promise.all([...used(p).map(([n, f]) => load(n, f)), needsKit(p) ? loadKit() : true]);
 
   // ---------- browser panel ----------
   let cat = 0, query = '';
@@ -178,9 +221,10 @@ L.lib = (() => {
     const items = query ? CATS.flatMap(c => c.items.filter(it => (it.label + ' ' + c.name).toLowerCase().includes(query))) : CATS[cat].items;
     const head = query ? `${items.length} match${items.length === 1 ? '' : 'es'}` : CATS[cat].name;
     const note = !t ? 'Picking a sound makes a new track.' : t.type === 'audio' ? 'Audio track selected: picking a sound makes a new track.' : `Picking a sound puts it on <b>${esc(t.name)}</b> (a ${t.type === 'drums' ? 'drum' : 'synth'} track; the other kind makes a new track).`;
-    host.querySelector('.lib-head').innerHTML = `<h2>${head}</h2><p>${note}${CATS[cat].items[0].kind === 'gm' || query ? ' Sampled instruments download on first use and come with a touch of reverb.' : ''}</p>`;
+    const k0 = CATS[cat].items[0].kind, place = !query && (k0 === 'sfx' || k0 === 'loop');
+    host.querySelector('.lib-head').innerHTML = place ? `<h2>${head}</h2><p>Click one to put it in the song at the playhead (bar ${Math.floor(L.pos / 4) + 1}). Build-ups and fills <b>end</b> at the playhead, so put it where the drop lands. ${k0 === 'sfx' ? 'Effects are made to fit your tempo. For birds, the sea and applause, see Sampled sound effects further down.' : 'Loops use the kit on your drum track, and you can change any hit in the Editor.'}</p>` : `<h2>${head}</h2><p>${note}${CATS[cat].items[0].kind === 'gm' || query ? ' Sampled instruments download on first use and come with a touch of reverb.' : ''}</p>`;
     host.querySelector('.lib-list').innerHTML = items.length ? items.map(it => {
-      const s = it.kind === 'gm' && sets.get(keyOf(it.name)), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : 'sampled') : it.kind === 'kit' ? 'kit' : it.kind === 'pluck' ? 'modelled' : it.kind === 'combo' ? 'with effects' : 'synth';
+      const s = it.kind === 'gm' && sets.get(keyOf(it.name)), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : 'sampled') : it.kind === 'kit' ? (ACOUSTIC[it.label] ? 'recorded kit' : 'drum machine') : it.kind === 'sfx' ? (it.lead ? 'build-up' : 'effect') : it.kind === 'loop' ? (it.lead ? 'fill' : (it.bars || 1) >= 1 ? `${it.bars || 1} bar loop` : 'hit') : it.kind === 'pluck' ? 'modelled' : it.kind === 'combo' ? 'with effects' : 'synth';
       return `<button class="${isCur(it, I) ? 'cur' : ''}" data-k="${it.kind}" data-l="${esc(it.label)}"${it.name ? ` data-n="${it.name}"` : ''}><span>${esc(it.label)}</span><small>${tag}</small></button>`;
     }).join('') : '<p class="lib-none">Nothing by that name.</p>';
   }
@@ -188,7 +232,7 @@ L.lib = (() => {
   const byKey = key => { const [kind, name] = key.split(':'); return ALL.flatMap(c => c.items).find(it => it.kind === kind && (kind === 'gm' ? it.name : it.label) === name) || null; };
   // Puts a library sound on a track.
   function apply(t, it) {
-    if (it.kind === 'kit') t.inst = { preset: it.label, tune: it.tune, decay: it.decay };
+    if (it.kind === 'kit') { t.inst = { preset: it.label, tune: it.tune, decay: it.decay }; if (ACOUSTIC[it.label]?.room && !t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 1.1, mix: 0.2 }); }
     else if (it.kind === 'synth') t.inst = { preset: it.label, ...L.PRESETS[it.label] };
     else if (it.kind === 'combo') {
       apply(t, byKey(it.base));
@@ -199,6 +243,7 @@ L.lib = (() => {
     else { t.inst = { preset: it.label, sf: it.name, gain: 1, r: 0.3, strum: /guitar|banjo|shamisen|koto|sitar|harp/.test(it.name) ? 0.016 : 0 }; if (!t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 1.6, mix: 0.14 }); }
   }
   function pick(it) {
+    if (it.kind === 'sfx' || it.kind === 'loop') return L.sfx.pick(it);
     const want = it.kind === 'kit' ? 'drums' : 'synth';
     let t = L.trackById(L.sel.track);
     if (!t || t.type !== want) t = L.arr.addTrack(want);
@@ -207,6 +252,7 @@ L.lib = (() => {
     if (/^(Synth|Drums)( \d+)?$/.test(t.name) || t.name === old) t.name = it.label;
     L.commit();
     const sf = t.inst.sf;
+    if (it.kind === 'kit' && ACOUSTIC[it.label] && !(kit && kit.ready)) { L.toast('Loading the drums…', 0); loadKit().then(ok => { if (ok) { L.toast(''); L.engine.blip(t.id, 36); } }); return; }
     if (!sf) return L.engine.blip(t.id, it.kind === 'kit' ? 36 : 60);
     const s = sets.get(keyOf(sf, t.inst.font));
     if (s && s.ready) return L.engine.blip(t.id, 60);
@@ -221,5 +267,5 @@ L.lib = (() => {
     else if (b) pick(ALL.flatMap(x => x.items).find(it => it.kind === b.dataset.k && it.label === b.dataset.l && (it.name || '') === (b.dataset.n || '')));
   });
 
-  return { render, sample, ensure, ready, load, byKey, apply, TOTAL, names: () => GM.flatMap(g => g[1].split(' ')), base: BASE };
+  return { render, sample, ensure, ready, load, byKey, apply, drum, acoustic, loadKit, TOTAL, names: () => GM.flatMap(g => g[1].split(' ')), base: BASE };
 })();

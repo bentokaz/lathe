@@ -222,7 +222,33 @@ L.engine = (() => {
     return m;
   }
 
+  // A hit from the recorded kit. Each one is tuned a few cents differently, as no two real hits are the same.
+  function sampledHit(g, dest, I, lane, vel, t, s, K) {
+    const c = g.ctx, src = c.createBufferSource(), amp = c.createGain(), d = I.decay ?? 1;
+    src.buffer = s.buf;
+    src.playbackRate.value = 2 ** (((I.tune || 0) / 3 + (Math.random() - 0.5) * 0.12) / 12);
+    amp.gain.setValueAtTime(s.gain * (0.72 + 0.28 * vel), t);
+    // short-decay kits damp each drum early (the crash rings longer)
+    if (d < 0.95) amp.gain.setTargetAtTime(0, t + 0.03 + s.buf.duration * (lane === 7 ? 0.5 : 0.22) * d, 0.07 * d);
+    let last = amp;
+    if (K.lp || K.hs) {
+      const f = c.createBiquadFilter();
+      if (K.lp) { f.type = 'lowpass'; f.frequency.value = K.lp; } else { f.type = 'highshelf'; f.frequency.value = 5000; f.gain.value = K.hs; }
+      amp.connect(f); last = f;
+    }
+    last.connect(dest);
+    src.connect(amp); src.start(t);
+    // a closed hi-hat cuts off an open one that is still ringing, as on a real kit
+    if (lane === 3 && dest._oh && dest._oh.t < t) dest._oh.amp.gain.setTargetAtTime(0, t, 0.012);
+    if (lane === 4) dest._oh = { amp, t };
+    const v = { kill() { try { src.stop(); } catch { /* not started */ } } };
+    src.onended = () => g.live.delete(v);
+    g.live.add(v);
+  }
+
   function drumHit(g, dest, I, lane, vel, t) {
+    const K = L.lib && L.lib.acoustic(I.preset), s = K && L.lib.drum(lane, vel);
+    if (s) return sampledHit(g, dest, I, lane, vel, t, s, K);
     const c = g.ctx, d = I.decay, tune = 2 ** (I.tune / 12), out = c.createGain();
     out.gain.value = vel; out.connect(dest);
     const env = (peak, dec) => {
