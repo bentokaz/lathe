@@ -383,6 +383,8 @@ L.arr = (() => {
     e.preventDefault();
     const row = e.target.closest('.trow'), rect = root.getBoundingClientRect();
     const beat = Math.max(0, snap((e.clientX - rect.left - HW + root.scrollLeft) / L.view.ppb));
+    const sound = e.dataTransfer.getData('application/x-lathe-sound');
+    if (sound) return L.sfxSearch.insert(JSON.parse(sound), row && L.trackById(row.dataset.track), beat);
     importFiles([...e.dataTransfer.files], row && L.trackById(row.dataset.track), beat);
   });
 

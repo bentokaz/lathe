@@ -69,6 +69,7 @@ L.lib = (() => {
     { name: 'Built-in synth', items: Object.keys(L.PRESETS).map(k => ({ kind: 'synth', label: k })) },
     { name: 'Indie and dream pop', items: COMBOS.map(([label, base, inst, fx]) => ({ kind: 'combo', label, base, inst, fx })) },
     { name: 'Drum kits', items: KITS.map(([label, tune, decay]) => ({ kind: 'kit', label, tune, decay })) },
+    { name: 'Find any sound effect', search: true, items: [] },
     ...L.sfx.items(),
     ...GM.map(([name, list]) => ({ name, items: list.split(' ').map(n => ({ kind: 'gm', name: n, label: nice(n) })) })),
   ];
@@ -212,17 +213,21 @@ L.lib = (() => {
   const cats = () => { const g = L.guide && L.guide.items(); return g ? [{ name: 'Suggested for this style', items: g }, ...ALL] : ALL; };
   function render() {
     if (!host.querySelector('.lib-side')) {
-      host.innerHTML = `<div class="lib-side"><input class="lib-q" type="search" placeholder="Search ${TOTAL} sounds" spellcheck="false"><nav></nav></div><div class="lib-main"><div class="lib-head"></div><div class="lib-list"></div></div>`;
+      host.innerHTML = `<div class="lib-side"><input class="lib-q" type="search" placeholder="Search ${TOTAL} sounds" spellcheck="false"><nav></nav></div><div class="lib-main"><div class="lib-head"></div><div class="lib-list"></div><div class="sx" hidden></div></div>`;
       host.querySelector('.lib-q').oninput = e => { query = e.target.value.trim().toLowerCase(); render(); };
     }
     const t = L.trackById(L.sel.track), I = current();
     const CATS = cats(); cat = Math.min(cat, CATS.length - 1);
-    host.querySelector('nav').innerHTML = CATS.map((c, i) => `<button data-cat="${i}" class="${!query && i === cat ? 'on' : ''}">${c.name}<small>${c.items.length}</small></button>`).join('');
+    host.querySelector('nav').innerHTML = CATS.map((c, i) => `<button data-cat="${i}" class="${!query && i === cat ? 'on' : ''}">${c.name}<small>${c.search ? 'online' : c.items.length}</small></button>`).join('');
+    const sx = host.querySelector('.sx'), searching = !query && CATS[cat].search;
+    sx.hidden = !searching; host.querySelector('.lib-head').hidden = host.querySelector('.lib-list').hidden = searching;
+    if (searching) return L.sfxSearch.show(sx);
+    L.sfxSearch.stop();
     const items = query ? CATS.flatMap(c => c.items.filter(it => (it.label + ' ' + c.name).toLowerCase().includes(query))) : CATS[cat].items;
     const head = query ? `${items.length} match${items.length === 1 ? '' : 'es'}` : CATS[cat].name;
     const note = !t ? 'Picking a sound makes a new track.' : t.type === 'audio' ? 'Audio track selected: picking a sound makes a new track.' : `Picking a sound puts it on <b>${esc(t.name)}</b> (a ${t.type === 'drums' ? 'drum' : 'synth'} track; the other kind makes a new track).`;
     const k0 = CATS[cat].items[0].kind, place = !query && (k0 === 'sfx' || k0 === 'loop');
-    host.querySelector('.lib-head').innerHTML = place ? `<h2>${head}</h2><p>Click one to put it in the song at the playhead (bar ${Math.floor(L.pos / 4) + 1}). Build-ups and fills <b>end</b> at the playhead, so put it where the drop lands. ${k0 === 'sfx' ? 'Effects are made to fit your tempo. For birds, the sea and applause, see Sampled sound effects further down.' : 'Loops use the kit on your drum track, and you can change any hit in the Editor.'}</p>` : `<h2>${head}</h2><p>${note}${CATS[cat].items[0].kind === 'gm' || query ? ' Sampled instruments download on first use and come with a touch of reverb.' : ''}</p>`;
+    host.querySelector('.lib-head').innerHTML = place ? `<h2>${head}</h2><p>Click one to put it in the song at the playhead (bar ${Math.floor(L.pos / 4) + 1}). Build-ups and fills <b>end</b> at the playhead, so put it where the drop lands. ${k0 === 'sfx' ? 'Effects are made to fit your tempo. Need something else, like a door, a crowd or rain? Use <b>Find any sound effect</b>.' : 'Loops use the kit on your drum track, and you can change any hit in the Editor.'}</p>` : `<h2>${head}</h2><p>${note}${CATS[cat].items[0].kind === 'gm' || query ? ' Sampled instruments download on first use and come with a touch of reverb.' : ''}</p>`;
     host.querySelector('.lib-list').innerHTML = items.length ? items.map(it => {
       const s = it.kind === 'gm' && sets.get(keyOf(it.name)), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : 'sampled') : it.kind === 'kit' ? (ACOUSTIC[it.label] ? 'recorded kit' : 'drum machine') : it.kind === 'sfx' ? (it.lead ? 'build-up' : 'effect') : it.kind === 'loop' ? (it.lead ? 'fill' : (it.bars || 1) >= 1 ? `${it.bars || 1} bar loop` : 'hit') : it.kind === 'pluck' ? 'modelled' : it.kind === 'combo' ? 'with effects' : 'synth';
       return `<button class="${isCur(it, I) ? 'cur' : ''}" data-k="${it.kind}" data-l="${esc(it.label)}"${it.name ? ` data-n="${it.name}"` : ''}><span>${esc(it.label)}</span><small>${tag}</small></button>`;

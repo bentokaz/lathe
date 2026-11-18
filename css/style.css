@@ -356,6 +356,28 @@ button.ib { width: 28px; height: 26px; padding: 0; display: inline-grid; place-i
 .lib-list button.cur { box-shadow: inset 5px 0 0 var(--sig); padding-left: 12px; }
 .lib-none { font-weight: 300; color: var(--dim); }
 
+/* sound effect search */
+.sx-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sx-q { flex: 1 1 280px; min-width: 0; border: 0; border-bottom: 2px solid var(--ink); background: transparent; padding: 6px 2px; font-size: 15px; user-select: text; }
+.sx-q:focus { outline: 0; border-color: var(--sig); }
+.sx-free { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.sx-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.sx-chips button { padding: 2px 8px; font: 11px var(--m); text-transform: none; letter-spacing: 0; border-color: var(--rule); }
+.sx-chips button:hover { border-color: var(--ink); }
+.sx-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; border-top: 1px solid var(--rule); padding: 5px 2px; cursor: grab; }
+.sx-row.on { box-shadow: inset 4px 0 0 var(--sig); }
+.sx-play { width: 28px; height: 26px; padding: 0; font-size: 11px; }
+.sx-t { min-width: 0; display: flex; flex-direction: column; }
+.sx-t b { font-size: 13.5px; font-weight: 600; font-stretch: 88%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-t small { font: 10px var(--m); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sx-lic { font: 9.5px var(--m); color: var(--ink-4); border: 1px solid var(--rule); border-radius: 3px; padding: 1px 5px; white-space: nowrap; cursor: help; }
+.sx-add { padding: 4px 12px; }
+.sx-msg { font-weight: 300; color: var(--dim); padding: 8px 2px; }
+.sx-more { margin-top: 10px; }
+.sx-dlg textarea { width: 100%; font: 11px var(--m); margin: 8px 0; user-select: text; }
+.sx-dlg div { display: flex; gap: 8px; justify-content: flex-end; }
+@media (max-width: 700px) { .sx-lic { display: none; } }
+
 /* ---------- chords and arpeggio ---------- */
 .ch-row { display: grid; grid-template-columns: auto minmax(0, 1fr); border-bottom: 1px solid var(--ink); flex: none; }
 .ch-set { display: grid; grid-template-columns: auto auto; gap: 2px 16px; padding: 6px 14px 7px 12px; border-right: 1px solid var(--ink); background: var(--paper-2); align-content: center; }
