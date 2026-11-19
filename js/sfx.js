@@ -122,8 +122,8 @@ L.sfx = (() => {
 
   // ---------- drum loops and fills ----------
   // One row per drum, one character per step (a 16th note unless `step` says otherwise):
-  // X hard, x normal, o soft (a ghost note), . nothing.  K kick, S snare, C clap, H hat, O open hat, T tom, R rim, Y crash
-  const LANE = { K: 0, S: 1, C: 2, H: 3, O: 4, T: 5, R: 6, Y: 7 }, VEL = { X: 1, x: 0.75, o: 0.42 };
+  // X hard, x normal, o soft (a ghost note), . nothing.  K kick, S snare, C clap, H hat, O open hat, T tom, R rim, Y crash, B cowbell
+  const LANE = { K: 0, S: 1, C: 2, H: 3, O: 4, T: 5, R: 6, Y: 7, B: 8 }, VEL = { X: 1, x: 0.75, o: 0.42 };
   const LOOPS = [
     { label: 'Rock beat', rows: { K: 'X.....x.X.x.....', S: '....X.......X...', H: 'x.x.x.x.x.x.x.x.' } },
     { label: 'Four on the floor', rows: { K: 'X...X...X...X...', C: '....x.......x...', H: '..x...x...x...x.', O: '..o...o...o...o.' } },
@@ -133,6 +133,7 @@ L.sfx = (() => {
     { label: 'Trap hats', bars: 2, rows: { K: 'X.......X.x.....X......x..X.....', S: '........X...............X.......', H: 'x.x.x.x.xxxxx.x.x.x.x.x.x.xxx.x.' } },
     { label: 'Breakbeat', bars: 2, rows: { K: 'X.X.......X.....X.X.......X.x...', S: '....X..o.o..X..o....X..o.o..X..o', H: 'x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.' } },
     { label: 'Funk', rows: { K: 'X..x..x...X..x..', S: '....X..o.o..X..o', H: 'xxxxxxxxxxxxxxxx' } },
+    { label: 'Cowbell groove', rows: { K: 'X.....x...X.....', S: '....X.......X...', H: 'x.x.x.x.x.x.x.x.', B: 'X..x..X...X.x...' } },
     { label: 'Bossa nova', bars: 2, rows: { K: 'X..xX..xX..xX..x', R: 'x..x..x...x..x..x..x..x...x..x..', H: 'oxoxoxoxoxoxoxoxoxoxoxoxoxoxoxox' } },
     { label: 'Reggaeton', rows: { K: 'X...X...X...X...', S: '...x..x....x..x.', H: 'x.x.x.x.x.x.x.x.' } },
     { label: 'Shuffle', step: 1 / 3, rows: { K: 'X.....x.....', S: '...X.....X..', H: 'x.xx.xx.xx.x' } },

@@ -143,7 +143,7 @@
     if (k === 'z' || k === 'x') { L.view.oct = clamp(L.view.oct + (k === 'x' ? 1 : -1), 1, 6); L.toast('Keyboard octave ' + L.view.oct, 1200); L.kb.render(); return; }
     if (e.code in KEYS) {
       const t = L.trackById(L.sel.track);
-      const p = t && t.type === 'drums' ? 36 + KEYS[e.code][0] % 8 : 12 * (L.view.oct + 1) + KEYS[e.code][0];
+      const p = t && t.type === 'drums' ? 36 + KEYS[e.code][0] % L.DRUMS.length : 12 * (L.view.oct + 1) + KEYS[e.code][0];
       L.perf.down(e.code, [p]);
     } else if (/^Digit[1-7]$/.test(e.code)) L.perf.pad(e.code, +e.code[5] - 1);
   });
@@ -156,6 +156,7 @@
       inp.onmidimessage = ({ data: [st, p, v] }) => {
         const c = st & 0xf0;
         if (c === 0x90 && v) L.perf.down('midi' + p, [p], v / 127); else if (c === 0x80 || c === 0x90) L.perf.up('midi' + p);
+        else if (c === 0xE0) L.engine.wheel(((v << 7 | p) - 8192) / 8192);
       };
     });
     hook(); m.onstatechange = hook;

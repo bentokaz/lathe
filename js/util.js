@@ -35,7 +35,7 @@ const NN = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 L.pitchName = p => NN[p % 12] + (Math.floor(p / 12) - 1);
 L.isBlack = p => [1, 3, 6, 8, 10].includes(p % 12);
 L.CHORDS = { Major: [0, 4, 7], Minor: [0, 3, 7], '7th': [0, 4, 7, 10], 'Major 7th': [0, 4, 7, 11], 'Minor 7th': [0, 3, 7, 10], Sus2: [0, 2, 7], Sus4: [0, 5, 7], Diminished: [0, 3, 6], Augmented: [0, 4, 8], Power: [0, 7, 12] };
-L.DRUMS = ['Kick', 'Snare', 'Clap', 'Hat', 'Open hat', 'Tom', 'Rim', 'Crash'];
+L.DRUMS = ['Kick', 'Snare', 'Clap', 'Hat', 'Open hat', 'Tom', 'Rim', 'Crash', 'Cowbell'];
 
 const listeners = {};
 L.on = (ev, fn) => (listeners[ev] ||= []).push(fn);

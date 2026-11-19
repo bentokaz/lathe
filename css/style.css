@@ -113,8 +113,8 @@ input[type=range]::-moz-range-thumb { width: 7px; height: 15px; background: var(
 .hot i { background: var(--sig) !important; }
 
 .lane { flex: 1; position: relative; border-bottom: 1px solid var(--ink-3); background-color: var(--ink);
-  background-image: linear-gradient(to right, var(--ink-4) 1px, transparent 1px), linear-gradient(to right, var(--bl) 1px, transparent 1px), linear-gradient(to right, transparent 50%, rgba(216, 211, 199, .03) 50%);
-  background-size: calc(var(--ppb) * 4) 100%, var(--ppb) 100%, calc(var(--ppb) * 32) 100%; }
+  background-image: linear-gradient(to right, var(--ink-4) 1px, transparent 1px), linear-gradient(to right, var(--bl) 1px, transparent 1px), linear-gradient(to right, var(--sl, transparent) 1px, transparent 1px), linear-gradient(to right, transparent 50%, rgba(216, 211, 199, .03) 50%);
+  background-size: calc(var(--ppb) * 4) 100%, var(--ppb) 100%, var(--sub, var(--ppb)) 100%, calc(var(--ppb) * 32) 100%; }
 .trow.sel .lane { background-color: color-mix(in srgb, var(--ink) 88%, var(--paper)); }
 .clip { position: absolute; top: 4px; bottom: 4px; background: var(--c); color: var(--ink); border-radius: 2px; overflow: hidden; cursor: grab; touch-action: none; }
 .clip.sel { background: var(--sig); }
@@ -226,7 +226,7 @@ input[type=range]::-moz-range-thumb { width: 7px; height: 15px; background: var(
 .s-top { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; overflow: hidden; }
 .s-no { font-weight: 300; font-size: 18px; color: var(--dim); font-stretch: 75%; line-height: 1; }
 .s-name { font-weight: 700; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
-.s-fx { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; }
+.s-fx { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; }
 .s-fx button { padding: 2px 0; font-size: 8.5px; letter-spacing: 0; border-color: var(--rule); color: var(--dim); }
 .s-fx button.on { border-color: var(--ink); color: var(--paper); }
 .s-pan { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 5px; }
@@ -431,6 +431,9 @@ button.ib { width: 28px; height: 26px; padding: 0; display: inline-grid; place-i
 .vlane { background-image: none; background-color: var(--ink); overflow: hidden; }
 .vclip { position: absolute; top: 4px; bottom: 4px; background: var(--ink-3); border-radius: 2px; cursor: grab; touch-action: none; }
 .vclip img { position: absolute; top: 0; height: 100%; pointer-events: none; }
+.cut { position: absolute; top: 0; bottom: 0; width: 7px; margin-left: -3px; cursor: pointer; z-index: 1; }
+.cut::after { content: ''; position: absolute; left: 3px; top: 0; bottom: 0; width: 1px; background: var(--paper); box-shadow: 1px 0 0 var(--ink), -1px 0 0 var(--ink); opacity: .8; }
+.cut:hover::after { opacity: 1; background: var(--sig); }
 .mk { position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -1px; border-left: 2px solid var(--sig); cursor: pointer; z-index: 1; }
 .mk b { position: absolute; left: 0; top: 0; background: var(--sig); color: var(--on-sig); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 0 4px; white-space: nowrap; font-stretch: 78%; }
 

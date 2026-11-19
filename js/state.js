@@ -23,8 +23,10 @@
 
   const fx = () => ({
     eq: { on: false, low: 0, mid: 0, high: 0 },
-    dist: { on: false, amt: 0.3 },
+    dist: { on: false, amt: 0.3, mode: 'Warm' },
+    muffle: { on: false, amt: 0.6 },
     comp: { on: false, thr: -18, ratio: 4 },
+    duck: { on: false, src: '', amt: 0.7, rel: 0.25 },
     chorus: { on: false, rate: 0.8, depth: 0.5, mix: 0.5 },
     delay: { on: false, time: 0.75, fb: 0.35, mix: 0.25 },
     reverb: { on: false, size: 2, mix: 0.25 },
@@ -159,7 +161,16 @@
   // fills in settings that projects saved by an older version do not have
   const upgrade = p => {
     const d = fx();
-    p.tracks.forEach(t => { for (const k in d) if (!t.fx[k]) t.fx[k] = d[k]; });
+    p.tracks.forEach(t => {
+      for (const k in d) if (!t.fx[k]) t.fx[k] = d[k];
+      t.fx.dist.mode ||= 'Warm';
+      // the old Filter lane (0 = 60 Hz, 1 = open) became Muffle (0 = clear, 1 = 206 Hz): same sound, turned over
+      if (t.auto && t.auto.cut) {
+        if (t.auto.cut.length && !(t.auto.muf && t.auto.muf.length)) t.auto.muf = t.auto.cut.map(([b, v]) => [b, L.clamp(-Math.log2(60 * 2 ** (v * 8.35) / 20000) / 6.6, 0, 1)]);
+        delete t.auto.cut;
+        if (t.autoK === 'cut') t.autoK = 'muf';
+      }
+    });
     p.id ||= L.songId(); p.master ||= { vol: 0.8 }; p.loop ||= { on: false, start: 0, end: 16 };
     return p;
   };

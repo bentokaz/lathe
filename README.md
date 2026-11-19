@@ -10,15 +10,15 @@ Made by bentokaz as a school project.
 
 ## What it does
 
-- **Timeline** with synth, drum and audio tracks. Clips can be moved, trimmed, split, copied and looped by dragging their corner. Select several with Shift-click, by dragging a box across empty space, or with Ctrl+A, then move, copy or delete them together. Tracks can be duplicated.
+- **Timeline** with synth, drum and audio tracks. Snap to bars, beats, 1/8 down to 1/64, triplets, or nothing, and zoom in far enough to place things by the millisecond. Clips can be moved, trimmed, split, copied and looped by dragging their corner. Select several with Shift-click, by dragging a box across empty space, or with Ctrl+A, then move, copy or delete them together. Tracks can be duplicated.
 - **Piano roll** with chord stamping, hover-a-note-to-make-a-chord, arpeggiate, quantize, humanize (small random nudges to timing and loudness, so parts sound played) and velocity.
 - **On-screen keyboard** with chord pads and an arpeggiator. The computer keyboard and MIDI keyboards play it too.
-- **More than 150 sounds**: modelled guitars and ukulele, built-in synths, recorded drum kits and drum machines, and the 128 General MIDI instruments, which download the first time they are used.
+- **More than 200 sounds**: modelled guitars and ukulele, built-in synths, real choirs recorded on Mellotron tape, recorded drum kits (with cowbell) and drum machines, a hard distorted kit, and the 128 General MIDI instruments, which download the first time they are used.
 - **Sound effects, loops and fills**: risers, a reverse cymbal, impacts, sub drops, a downlifter, whooshes and vinyl crackle, made to fit the song's tempo, plus drum loops (rock, house, boom bap, trap, breakbeat, bossa nova and more) and fills. One click puts them at the playhead; build-ups end there, so they lead into the drop.
 - **Find any sound effect**: searches Freesound and Wikimedia Commons (through [Openverse](https://openverse.org)) and the [BBC Sound Effects](https://sound-effects.bbcrewind.co.uk) archive from inside the Sounds tab. Hear a sound with one click and add it with another (or drag it onto a track). Each sound shows its licence, a "No credit needed" switch shows only sounds that are free for anything, and **Credits for this song** lists who to credit. Openverse allows 200 searches a day per network, so searches are remembered for a week; BBC sounds are for personal, school and research use.
 - **Styles** for 36 kinds of music, most popular first. A style sets the key, tempo and instruments and marks the notes and chords that fit. The play button gives an 8-bar preview, and **Write backing** writes chords, bass and drums that come out differently every time. **New variation** gives another take; the melody is up to you.
-- **Mixer** with EQ, drive, compressor, chorus, delay and reverb, plus mute and solo.
-- **Automation** for volume, pan, filter, reverb and echo, drawn as a line on each track.
+- **Mixer** with EQ, distortion (warm, hard clip, fuzz or bitcrush), muffle, compressor, sidechain, chorus, delay and reverb on every track, plus mute and solo. Sidechain turns a track down each time the kick (or any track you pick) plays.
+- **Automation** for volume, pan, muffle, pitch bend, reverb and echo, drawn as a line on each track. A MIDI keyboard's pitch wheel bends the selected track too.
 - **Recording** of notes from the keyboard, or audio from a microphone.
 - **Import**:
   - audio: WAV, AIFF, MP3, AAC/M4A, FLAC, OGG and Opus;
@@ -31,7 +31,7 @@ Made by bentokaz as a school project.
   - the video with your music: MP4, MOV, WebM or MKV.
 
   Exports render faster than real time.
-- **Video scoring**: add a film, drop markers on the moments to hit, watch it full screen with the music, and export the film with the music.
+- **Video scoring**: add a film and Lathe finds the cuts between shots by itself; clips, the playhead and the loop snap to them (and to your own markers) as you drag. Drop markers on the moments to hit, watch it full screen with the music, and export the film with the music.
 - **My songs**: every song is kept in the browser, with an optional account to open them anywhere (videos included). A share link gives a friend their own copy.
 - **Feedback** from the button in the top bar, without signing in to anything.
 - **Tutorial**: 16 steps (gear menu, or the start screen).
@@ -114,7 +114,7 @@ A song's video goes into the account too. The free plan takes files up to 50 MB,
 | B | FatBoy | CC BY-SA 3.0 |
 | C | FluidR3 GM | CC BY 3.0 |
 
-The recorded drum kits (Standard, Tight, Low and slow, Bright, Roomy) use the GM kit from the [Hydrogen](https://github.com/hydrogen-music/hydrogen) drum machine (GPL), streamed from [smpldsnds/hydrogen-drum-samples](https://github.com/smpldsnds/hydrogen-drum-samples). The guitars, ukulele, synths, drum machines and sound effects are generated in the browser, so they use no recordings.
+The recorded choirs are Mellotron and Chamberlin tapes from the [Mellotron archive](https://archive.org/details/mellotron-archive-cd-rom-nki-wav.-7z), streamed from [smpldsnds/archiveorg-mellotron](https://github.com/smpldsnds/archiveorg-mellotron). The recorded drum kits (Standard, Tight, Low and slow, Bright, Roomy, and all but the kick of Hard and distorted) use the GM kit from the [Hydrogen](https://github.com/hydrogen-music/hydrogen) drum machine (GPL), streamed from [smpldsnds/hydrogen-drum-samples](https://github.com/smpldsnds/hydrogen-drum-samples). The guitars, ukulele, synths, drum machines and sound effects are generated in the browser, so they use no recordings.
 
 **Libraries:**
 

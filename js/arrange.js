@@ -5,7 +5,18 @@ L.arr = (() => {
   const HW = 236, TH = 68, RH = 34;
   let clipboard = null;
 
-  const snap = (b, ev) => (ev && ev.shiftKey) || !L.view.snap ? b : Math.round(b / L.view.snap) * L.view.snap;
+  // the grid, but cuts and markers in the video pull harder when one is close (Shift ignores both)
+  const snap = (b, ev) => {
+    if (ev && ev.shiftKey) return b;
+    const m = L.video && L.video.magnet(b);
+    return m !== null && m !== undefined ? m : !L.view.snap ? b : Math.round(b / L.view.snap) * L.view.snap;
+  };
+  // a clip being moved sticks to a cut by its start or by its end
+  const snapSpan = (s, len, ev) => {
+    if (ev && ev.shiftKey) return s;
+    const a = L.video && L.video.magnet(s), z = L.video && L.video.magnet(s + len);
+    return a != null ? a : z != null ? z - len : snap(s, ev);
+  };
   const total = () => Math.max(128, Math.ceil((L.projectEnd() + 64) / 4) * 4);
   const kind = t => t.type === 'synth' ? 'Synth / ' + t.inst.preset : t.type === 'drums' ? 'Drums / ' + (t.inst.preset || 'Standard') : 'Audio';
 
@@ -13,6 +24,10 @@ L.arr = (() => {
     const p = L.project, ppb = L.view.ppb, tot = total();
     root.style.setProperty('--ppb', ppb + 'px');
     root.style.setProperty('--bl', ppb < 10 ? 'transparent' : 'var(--ink-3)');
+    // lines for the snap grid when it is finer than a beat and there is room to see them
+    const sub = L.view.snap && L.view.snap < 1 ? L.view.snap * ppb : 0;
+    root.style.setProperty('--sub', (sub >= 6 ? sub : ppb) + 'px');
+    root.style.setProperty('--sl', sub >= 6 ? 'rgba(216, 211, 199, .07)' : 'transparent');
     inner.style.width = HW + tot * ppb + 'px';
 
     let step = 1; while (step * 4 * ppb < 46) step *= 2;
@@ -236,7 +251,7 @@ L.arr = (() => {
     L.drag(e, (dx, dy, ev) => {
       const db = dx / ppb; moved = true;
       if (mode === 'm') {
-        c.start = Math.max(0, snap(s0 + db, ev));
+        c.start = Math.max(0, snapSpan(s0 + db, len0, ev));
         const dest = p.tracks[clamp(ti0 + Math.round(dy / TH), 0, p.tracks.length - 1)];
         if (dest !== home && dest.type === t.type) {
           home.clips = home.clips.filter(x => x !== c); dest.clips.push(c); home = dest;
@@ -277,7 +292,8 @@ L.arr = (() => {
     let moved = copy;
     L.drag(e, (dx, dy, ev) => {
       moved = true;
-      const d = Math.max(-lo, snap(lo + dx / ppb, ev) - lo);
+      const hi = Math.max(...rs.map((r, i) => s0[i] + r.clip.len));
+      const d = Math.max(-lo, snapSpan(lo + dx / ppb, hi - lo, ev) - lo);
       rs.forEach((r, i) => { r.clip.start = s0[i] + d; if (els[i]) els[i].style.left = r.clip.start * ppb + 'px'; });
     }, () => {
       if (moved) L.commit();
@@ -322,7 +338,7 @@ L.arr = (() => {
   function zoom(f, cx) {
     const rect = root.getBoundingClientRect(), x = (cx ?? rect.left + HW + 200) - rect.left - HW;
     const beat = (root.scrollLeft + x) / L.view.ppb;
-    L.view.ppb = clamp(L.view.ppb * f, 5, 160);
+    L.view.ppb = clamp(L.view.ppb * f, 5, 1200);
     render();
     root.scrollLeft = beat * L.view.ppb - x;
   }
@@ -332,7 +348,7 @@ L.arr = (() => {
   }, { passive: false });
   $('#z-in').onclick = () => zoom(1.3);
   $('#z-out').onclick = () => zoom(1 / 1.3);
-  $('#snap').onchange = e => { L.view.snap = +e.target.value; };
+  $('#snap').onchange = e => { L.view.snap = +e.target.value; render(); };
 
   // ---------- tracks, import ----------
   function addTrack(type) {

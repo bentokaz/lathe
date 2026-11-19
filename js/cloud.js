@@ -53,7 +53,7 @@ L.cloud = (() => {
   // Saves the open song to the account.
   async function sync() {
     clearTimeout(timer);
-    if (!user || busy || !dirty) return;
+    if (!user || busy || !dirty || !L.project) return;
     // like the list in this browser, an empty song is not worth keeping yet
     if (!L.project.tracks.some(t => t.clips.length) && !L.project.video) { dirty = false; return status(); }
     busy = true; dirty = false; status();

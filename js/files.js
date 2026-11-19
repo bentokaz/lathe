@@ -46,7 +46,7 @@ L.files = (() => {
   }
 
   // ---------- MIDI out ----------
-  const DRUM_OUT = [36, 38, 39, 42, 46, 45, 37, 49]; // kick, snare, clap, hat, open hat, tom, rim, crash
+  const DRUM_OUT = [36, 38, 39, 42, 46, 45, 37, 49, 56]; // kick, snare, clap, hat, open hat, tom, rim, crash, cowbell
   const PLUCK_PROG = { 'Nylon guitar': 24, 'Steel-string acoustic': 25, 'Twelve-string jangle': 25, 'Clean electric': 27, 'Jazz guitar': 26, Ukulele: 24, Banjo: 105, Harp: 46, 'Plucked bass': 33 };
   const SYNTH_PROG = { Keys: 4, Bass: 38, Lead: 81, Pad: 89, Pluck: 45, Organ: 16, Sub: 38, Glass: 98, Strings: 50, Brass: 62, Bell: 14, Acid: 87, Reese: 38, Chip: 80, Whistle: 78, Stab: 81 };
   function program(t) {
@@ -77,7 +77,7 @@ L.files = (() => {
       const ev = [{ t: 0, o: 0, d: text(3, t.name) }];
       if (!drums) ev.push({ t: 0, o: 0, d: [0xc0 | ch, program(t)] });
       for (const c of t.clips) for (const n of notesOf(c)) {
-        const key = drums ? DRUM_OUT[((n.p - 36) % 8 + 8) % 8] : n.p, vel = Math.max(1, Math.min(127, Math.round(n.v * 127)));
+        const key = drums ? DRUM_OUT[((n.p - 36) % L.DRUMS.length + L.DRUMS.length) % L.DRUMS.length] : n.p, vel = Math.max(1, Math.min(127, Math.round(n.v * 127)));
         ev.push({ t: tick(n.s), o: 1, d: [0x90 | ch, key, vel] }, { t: Math.max(tick(n.s) + 1, tick(n.s + n.l)), o: 0, d: [0x80 | ch, key, 0] });
       }
       return chunk(ev);
@@ -88,7 +88,7 @@ L.files = (() => {
   }
 
   // ---------- MIDI in ----------
-  const DRUM_IN = { 35: 0, 36: 0, 37: 6, 38: 1, 40: 1, 39: 2, 42: 3, 44: 3, 46: 4, 41: 5, 43: 5, 45: 5, 47: 5, 48: 5, 50: 5, 49: 7, 51: 7, 52: 7, 55: 7, 57: 7, 59: 7 };
+  const DRUM_IN = { 35: 0, 36: 0, 37: 6, 38: 1, 40: 1, 39: 2, 42: 3, 44: 3, 46: 4, 41: 5, 43: 5, 45: 5, 47: 5, 48: 5, 50: 5, 49: 7, 51: 7, 52: 7, 55: 7, 57: 7, 59: 7, 56: 8 };
   function parseMidi(ab) {
     const d = new Uint8Array(ab); let p = 0;
     const str = n => String.fromCharCode(...d.subarray(p, p + n));

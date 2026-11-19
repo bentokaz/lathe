@@ -8,7 +8,7 @@ L.ed = (() => {
 
   const ctx = () => L.clipById(L.sel.clip);
   const geom = t => t.type === 'drums'
-    ? { rh: 30, rows: 8, dir: 1, row: p => p - 36, pitch: r => 36 + r }
+    ? { rh: 30, rows: L.DRUMS.length, dir: 1, row: p => p - 36, pitch: r => 36 + r }
     : { rh: 16, rows: P_HI - P_LO + 1, dir: -1, row: p => P_HI - p, pitch: r => P_HI - r };
   const sn = () => L.view.esnap;
   const q = v => sn() ? Math.round(v / sn()) * sn() : v;

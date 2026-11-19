@@ -31,13 +31,16 @@ L.panels = (() => {
   ];
   const FX = [
     ['eq', 'Equaliser', [['fx.eq.low', 'Low', -15, 15, 0.5, dB], ['fx.eq.mid', 'Mid', -15, 15, 0.5, dB], ['fx.eq.high', 'High', -15, 15, 0.5, dB]]],
-    ['dist', 'Drive', [['fx.dist.amt', 'Amount', 0, 1, 0.01, pct]]],
+    ['dist', 'Distortion', [{ sel: 'fx.dist.mode', label: 'Type', opts: () => [['Warm', 'Warm'], ['Hard', 'Hard clip'], ['Fuzz', 'Fuzz'], ['Crush', 'Bitcrush']] }, ['fx.dist.amt', 'Amount', 0, 1, 0.01, pct]]],
+    ['muffle', 'Muffle', [['fx.muffle.amt', 'Amount', 0, 1, 0.01, v => v < 0.005 ? 'clear' : pct(v)]]],
     ['chorus', 'Chorus', [['fx.chorus.rate', 'Speed', 0.1, 5, 0.05, v => v.toFixed(2) + ' Hz'], ['fx.chorus.depth', 'Depth', 0, 1, 0.01, pct], ['fx.chorus.mix', 'Mix', 0, 1, 0.01, pct]]],
     ['comp', 'Compressor', [['fx.comp.thr', 'Threshold', -50, 0, 1, v => v + ' dB'], ['fx.comp.ratio', 'Ratio', 1, 20, 0.5, v => v + ':1']]],
+    ['duck', 'Sidechain', [{ sel: 'fx.duck.src', label: 'Ducks for', opts: t => [['', 'Every kick drum'], ...L.project.tracks.filter(x => x !== t && x.type !== 'audio').map(x => [x.id, 'Notes on ' + x.name])] }, ['fx.duck.amt', 'Depth', 0, 1, 0.01, pct], ['fx.duck.rel', 'Recovery', 0.03, 1, 0, sec, true]]],
     ['delay', 'Delay', [['fx.delay.time', 'Time', 0.125, 2, 0.125, v => v + ' beat'], ['fx.delay.fb', 'Feedback', 0, 0.9, 0.01, pct], ['fx.delay.mix', 'Mix', 0, 1, 0.01, pct]]],
     ['reverb', 'Reverb', [['fx.reverb.size', 'Size', 0.3, 6, 0.1, v => v.toFixed(1) + ' s'], ['fx.reverb.mix', 'Mix', 0, 1, 0.01, pct]]],
   ];
-  const DEFS = Object.fromEntries([...SYNTH, SAMPLED[0], STRUM, ...PLUCK, ...KIT, ...FX.flatMap(f => f[2])].map(d => [d[0], d]));
+  const DEFS = Object.fromEntries([...SYNTH, SAMPLED[0], STRUM, ...PLUCK, ...KIT, ...FX.flatMap(f => f[2])].filter(Array.isArray).map(d => [d[0], d]));
+  const NOTE = { duck: 'Turns this track down each time the kick (or the track you pick) plays, then lets it swell back. Deep and slow gives the pumping sound of dance music.', muffle: 'Sounds like the music is in the next room. Draw it changing over time with the Muffle automation lane.' };
 
   const get = (t, path) => path.split('.').reduce((o, k) => o[k], t);
   const set = (t, path, v) => { const ks = path.split('.'), last = ks.pop(); ks.reduce((o, k) => o[k], t)[last] = v; };
@@ -45,6 +48,7 @@ L.panels = (() => {
   const fromPos = (d, x) => d[6] ? d[2] * (d[3] / d[2]) ** (x / 1000) : x;
 
   const row = (t, d) => {
+    if (d.sel) { const v = get(t, d.sel) || ''; return `<label class="prm sel2"><span>${d.label}</span><select data-fs="${d.sel}">${d.opts(t).map(([o, s]) => `<option value="${esc(o)}"${o === v ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>`; }
     const v = get(t, d[0]);
     return `<label class="prm"><span>${d[1]}</span><input type="range" data-p="${d[0]}" ${d[6] ? 'min="0" max="1000" step="1"' : `min="${d[2]}" max="${d[3]}" step="${d[4]}"`} value="${toPos(d, v)}"><output>${d[5](v)}</output></label>`;
   };
@@ -58,6 +62,8 @@ L.panels = (() => {
     const sound = `<div class="prm sel2"><span>Sound</span><button class="i-sound" data-a="browse" title="Open the sound library"><b>${esc(t.inst ? t.inst.preset || 'Standard' : '')}</b>${L.icon('browse')}</button></div>`;
     if (t.type === 'synth' && t.inst.pluck) {
       inst = `${sound}<p class="i-note">Modelled plucked string. Chords are strummed string by string; set Strum to off for a block chord.</p>${PLUCK.map(d => row(t, d)).join('')}`;
+    } else if (t.type === 'synth' && t.inst.sf && L.lib.choir(t.inst.sf)) {
+      inst = `${sound}<p class="i-note">Real singers, recorded one note at a time on Mellotron tape. Long notes hold for as long as you like.</p>${SAMPLED.slice(0, 2).map(d => row(t, d)).join('')}`;
     } else if (t.type === 'synth' && t.inst.sf) {
       const fonts = [['', 'Best for this instrument'], ['MusyngKite/', 'Set A (MusyngKite)'], ['FatBoy/', 'Set B (FatBoy)'], ['FluidR3_GM/', 'Set C (FluidR3)']];
       inst = `${sound}<div class="prm sel2"><span>Recording</span><select data-s="font" title="Each set is a different recording of the instrument; try them">${fonts.map(([v, s]) => `<option value="${v}"${(t.inst.font || '') === v ? ' selected' : ''}>${s}</option>`).join('')}</select></div><p class="i-note">Sampled instrument. Bowed, blown and held sounds sustain for as long as the note; plucked and struck ones ring out naturally.</p>${SAMPLED.map(d => row(t, d)).join('')}`;
@@ -75,7 +81,7 @@ L.panels = (() => {
       <div class="i-acts"><button class="ib" data-a="up" title="Move track up" aria-label="Move track up">${L.icon('up')}</button><button class="ib" data-a="down" title="Move track down" aria-label="Move track down">${L.icon('down')}</button><button class="ib" data-a="dup" title="Duplicate track" aria-label="Duplicate track">${L.icon('dup')}</button><button class="ib" data-a="del" title="Delete track" aria-label="Delete track">${L.icon('trash')}</button></div>
       <section><h3>${t.type === 'synth' ? (t.inst.sf ? 'Instrument' : 'Synth') : t.type === 'drums' ? 'Drum kit' : 'Input'}</h3>${inst}</section>
       <section><h3>Effects <small>${FX.filter(f => t.fx[f[0]].on).length} of ${FX.length} on</small></h3>
-        ${FX.map(([k, name, defs]) => `<div class="fx${t.fx[k].on ? ' on' : ''}"><button class="fx-t" data-fx="${k}"><b></b>${name}</button>${t.fx[k].on ? defs.map(d => row(t, d)).join('') : ''}</div>`).join('')}
+        ${FX.map(([k, name, defs]) => `<div class="fx${t.fx[k].on ? ' on' : ''}"><button class="fx-t" data-fx="${k}"><b></b>${name}</button>${t.fx[k].on ? (NOTE[k] ? `<p class="i-note">${NOTE[k]}</p>` : '') + defs.map(d => row(t, d)).join('') : ''}</div>`).join('')}
       </section>`;
   }
 
@@ -88,6 +94,7 @@ L.panels = (() => {
   insp.addEventListener('change', e => {
     const t = L.trackById(L.sel.track), el = e.target;
     if (el.classList.contains('i-name')) t.name = el.value || 'Track';
+    else if (el.dataset.fs) set(t, el.dataset.fs, el.value);
     else if (el.dataset.s === 'preset') { if (L.PRESETS[el.value]) t.inst = { preset: el.value, ...L.PRESETS[el.value] }; }
     else if (el.dataset.s) t.inst[el.dataset.s] = el.value;
     else if (!el.dataset.p) return;
@@ -110,10 +117,11 @@ L.panels = (() => {
   // ---------- mixer ----------
   function renderMixer() {
     const p = L.project;
+    const SHORT = { eq: 'eq', dist: 'di', muffle: 'mu', comp: 'co', duck: 'sc', chorus: 'ch', delay: 'de', reverb: 're' };
     mixer.innerHTML = p.tracks.map((t, i) => `
       <div class="strip${t.id === L.sel.track ? ' sel' : ''}" data-track="${t.id}">
         <div class="s-top"><span class="s-no">${pad(i + 1, 2)}</span><span class="s-name">${esc(t.name)}</span></div>
-        <div class="s-fx">${FX.map(([k]) => `<button data-fx="${k}" class="${t.fx[k].on ? 'on' : ''}" title="${k}">${k.slice(0, 2)}</button>`).join('')}</div>
+        <div class="s-fx">${FX.map(([k, name]) => `<button data-fx="${k}" class="${t.fx[k].on ? 'on' : ''}" title="${name}">${SHORT[k]}</button>`).join('')}</div>
         <label class="s-pan"><span>Pan</span><input type="range" data-k="pan" min="-1" max="1" step="0.02" value="${t.pan}"></label>
         <div class="s-fad"><div class="vmeter" data-meter="${t.id}"><i></i></div><input class="fader" type="range" data-k="vol" min="0" max="1" step="0.005" value="${t.vol}"></div>
         <output>${L.db(L.gain(t.vol))}</output>

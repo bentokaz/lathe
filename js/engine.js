@@ -19,9 +19,17 @@ L.engine = (() => {
     }
     return g.ir[key] = b;
   }
-  function distCurve(amt) {
-    const k = amt * 60, n = 1024, c = new Float32Array(n);
-    for (let i = 0; i < n; i++) { const x = i * 2 / (n - 1) - 1; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); }
+  // Warm: soft saturation. Hard: clipped flat, like an overdriven amp. Fuzz: lopsided and buzzy.
+  // Crush: fewer volume steps, the gritty sound of old samplers and game consoles.
+  function distCurve(amt, mode = 'Warm') {
+    const n = mode === 'Crush' ? 8192 : 2048, c = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = i * 2 / (n - 1) - 1;
+      if (mode === 'Hard') { const k = 1 + amt * 40; c[i] = 0.8 * Math.max(-1, Math.min(1, x * k)); }
+      else if (mode === 'Fuzz') { const k = 2 + amt * 60; c[i] = x >= 0 ? 0.8 * (1 - Math.exp(-x * k)) : -0.55 * (1 - Math.exp(x * k * 0.35)); }
+      else if (mode === 'Crush') { const steps = 2 ** Math.round(10 - amt * 8.5); c[i] = 0.75 * Math.max(-1, Math.min(1, Math.round(x * (3 + amt * 12) * steps) / steps)); }
+      else { const k = amt * 60; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); }
+    }
     return c;
   }
 
@@ -46,8 +54,11 @@ L.engine = (() => {
       dIn: c.createGain(), delay: c.createDelay(4), dFb: c.createGain(), dWet: c.createGain(), dOut: c.createGain(),
       rIn: c.createGain(), conv: c.createConvolver(), rWet: c.createGain(), rOut: c.createGain(),
       cIn: c.createGain(), cDel: c.createDelay(0.1), cLfo: c.createOscillator(), cDepth: c.createGain(), cWet: c.createGain(), cOut: c.createGain(),
-      flt: bq('lowpass', 20000, 0.7), pan: c.createStereoPanner(), vol: c.createGain(), auto: c.createGain(), an: c.createAnalyser(),
+      flt: bq('lowpass', 20000, 0.7), pan: c.createStereoPanner(), vol: c.createGain(), duck: c.createGain(), auto: c.createGain(), an: c.createAnalyser(),
+      bend: c.createConstantSource(),
     };
+    // pitch bend, in cents: every note on the track follows it
+    n.bend.offset.value = 0; n.bend.start(); n.in._bend = n.bend;
     n.an.fftSize = 512; n.shaper.oversample = '2x';
     n.lo.connect(n.mid).connect(n.hi);
     n.dIn.connect(n.dOut); n.dIn.connect(n.delay); n.delay.connect(n.dFb).connect(n.delay); n.delay.connect(n.dWet).connect(n.dOut);
@@ -55,7 +66,7 @@ L.engine = (() => {
     // chorus: a short delay whose length is swept by a slow oscillator, mixed with the dry signal
     n.cIn.connect(n.cOut); n.cIn.connect(n.cDel).connect(n.cWet).connect(n.cOut);
     n.cLfo.connect(n.cDepth).connect(n.cDel.delayTime); n.cDel.delayTime.value = 0.018; n.cLfo.start();
-    n.flt.connect(n.pan); n.pan.connect(n.vol); n.vol.connect(n.auto); n.auto.connect(n.an); n.auto.connect(g.master);
+    n.flt.connect(n.pan); n.pan.connect(n.vol); n.vol.connect(n.duck).connect(n.auto); n.auto.connect(n.an); n.auto.connect(g.master);
     g.tracks.set(t.id, n);
   }
 
@@ -75,7 +86,8 @@ L.engine = (() => {
       cur.connect(n.flt);
     }
     n.lo.gain.value = f.eq.low; n.mid.gain.value = f.eq.mid; n.hi.gain.value = f.eq.high;
-    if (n._amt !== f.dist.amt) { n.shaper.curve = distCurve(f.dist.amt); n._amt = f.dist.amt; }
+    if (n._amt !== f.dist.amt || n._mode !== f.dist.mode) { n.shaper.curve = distCurve(f.dist.amt, f.dist.mode); n._amt = f.dist.amt; n._mode = f.dist.mode; }
+    if (!f.duck || !f.duck.on) { n.duck.gain.cancelScheduledValues(0); n.duck.gain.value = 1; }
     n.comp.threshold.value = f.comp.thr; n.comp.ratio.value = f.comp.ratio;
     n.delay.delayTime.setTargetAtTime(clamp(f.delay.time * 60 / proj.bpm, 0.01, 4), now, 0.03);
     n.cLfo.frequency.value = f.chorus.rate; n.cDepth.gain.value = f.chorus.depth * 0.006; n.cWet.gain.value = f.chorus.mix;
@@ -92,6 +104,9 @@ L.engine = (() => {
   }
 
   // ---------- voices ----------
+  // a note follows its track's pitch bend while it sounds, and lets go when it ends (or the graph would keep it alive)
+  const bendOn = (dest, src) => { if (dest._bend) dest._bend.connect(src.detune); };
+  const bendOff = (dest, src) => { if (dest._bend) try { dest._bend.disconnect(src.detune); } catch { /* already gone */ } };
   function synthVoice(g, dest, I, pitch, vel, t) {
     const c = g.ctx, f = 440 * 2 ** ((pitch - 69) / 12), amp = c.createGain(), flt = c.createBiquadFilter();
     const mk = (type, freq, det, lvl) => {
@@ -102,6 +117,7 @@ L.engine = (() => {
     };
     const oscs = [mk(I.o1, f, 0, 1 - I.mix)];
     if (I.mix > 0.01) oscs.push(mk(I.o2, f * 2 ** I.o2oct, I.o2det, I.mix));
+    oscs.forEach(o => bendOn(dest, o));
     const peak = Math.min(18000, I.cut * 2 ** (I.env * 5)), lvl = vel * 0.2;
     flt.type = 'lowpass'; flt.Q.value = I.res;
     flt.frequency.setValueAtTime(peak, t);
@@ -125,7 +141,7 @@ L.engine = (() => {
         oscs.forEach(o => { try { o.stop(now + 0.06); } catch { /* already stopped */ } });
       },
     };
-    oscs[0].onended = () => g.live.delete(v);
+    oscs[0].onended = () => { g.live.delete(v); oscs.forEach(o => bendOff(dest, o)); };
     g.live.add(v);
     return v;
   }
@@ -141,12 +157,12 @@ L.engine = (() => {
     tone.type = 'lowpass'; tone.Q.value = 0; tone.frequency.value = 700 + vel * vel * 17000;
     amp.gain.setValueAtTime(0, t);
     amp.gain.linearRampToValueAtTime(vel * hit.norm * (I.gain ?? 1), t + 0.004);
-    s.connect(tone).connect(amp).connect(dest); s.start(t, hit.lead);
+    s.connect(tone).connect(amp).connect(dest); s.start(t, hit.lead); bendOn(dest, s);
     const v = {
       release(tr) { tr = Math.max(tr, t + 0.01); amp.gain.setTargetAtTime(0, tr, r / 4); s.stop(tr + r * 1.6 + 0.05); },
       kill() { try { s.stop(); } catch { /* not started */ } },
     };
-    s.onended = () => g.live.delete(v);
+    s.onended = () => { g.live.delete(v); bendOff(dest, s); };
     g.live.add(v);
     return v;
   }
@@ -189,12 +205,12 @@ L.engine = (() => {
     body.type = 'peaking'; body.frequency.value = P.body || 200; body.Q.value = 1.3; body.gain.value = P.body ? 5 : 0;
     tone.type = 'lowpass'; tone.frequency.value = P.tone || 8000; tone.Q.value = 0.5;
     amp.gain.setValueAtTime(vel * (I.gain ?? 1), t);
-    s.connect(hp).connect(body).connect(tone).connect(amp).connect(dest); s.start(t);
+    s.connect(hp).connect(body).connect(tone).connect(amp).connect(dest); s.start(t); bendOn(dest, s);
     const v = {
       release(tr) { tr = Math.max(tr, t + 0.02); amp.gain.setTargetAtTime(0, tr, r / 4); s.stop(tr + r * 1.6 + 0.05); },
       kill() { try { s.stop(); } catch { /* not started */ } },
     };
-    s.onended = () => g.live.delete(v);
+    s.onended = () => { g.live.delete(v); bendOff(dest, s); };
     g.live.add(v);
     return v;
   }
@@ -236,6 +252,7 @@ L.engine = (() => {
       if (K.lp) { f.type = 'lowpass'; f.frequency.value = K.lp; } else { f.type = 'highshelf'; f.frequency.value = 5000; f.gain.value = K.hs; }
       amp.connect(f); last = f;
     }
+    if (K.drive) { const sh = c.createWaveShaper(), trim = c.createGain(); sh.curve = g.hitCurve ||= distCurve(K.drive, 'Warm'); trim.gain.value = 0.28; last.connect(sh).connect(trim); last = trim; }
     last.connect(dest);
     src.connect(amp); src.start(t);
     // a closed hi-hat cuts off an open one that is still ringing, as on a real kit
@@ -246,8 +263,24 @@ L.engine = (() => {
     g.live.add(v);
   }
 
+  // A hard, distorted kick: a sine dropping fast from a high pitch, driven into clipping so it punches through.
+  function hardKick(g, dest, I, vel, t) {
+    const c = g.ctx, d = I.decay ?? 1, tune = 2 ** ((I.tune || 0) / 12), o = c.createOscillator(), a = c.createGain(), pre = c.createGain(), sh = c.createWaveShaper(), lp = c.createBiquadFilter(), out = c.createGain();
+    o.frequency.setValueAtTime(320 * tune, t); o.frequency.exponentialRampToValueAtTime(52 * tune, t + 0.075); o.frequency.exponentialRampToValueAtTime(44 * tune, t + 0.4 * d);
+    a.gain.setValueAtTime(1, t); a.gain.setTargetAtTime(0.55, t + 0.04, 0.08); a.gain.setTargetAtTime(0, t + 0.22 * d, 0.07 * d);
+    pre.gain.value = 5; sh.curve = g.kickCurve ||= distCurve(0.5, 'Warm');
+    lp.type = 'lowpass'; lp.frequency.value = 7000; out.gain.value = 0.4 * vel;
+    o.connect(a).connect(pre).connect(sh).connect(lp).connect(out).connect(dest);
+    o.start(t); o.stop(t + 0.7 * d + 0.3);
+    const v = { kill() { try { o.stop(); } catch { /* not started */ } } };
+    o.onended = () => g.live.delete(v);
+    g.live.add(v);
+  }
+
   function drumHit(g, dest, I, lane, vel, t) {
-    const K = L.lib && L.lib.acoustic(I.preset), s = K && L.lib.drum(lane, vel);
+    const K = L.lib && L.lib.acoustic(I.preset);
+    if (K && K.hardKick && lane === 0) return hardKick(g, dest, I, vel, t);
+    const s = K && L.lib.drum(lane, vel);
     if (s) return sampledHit(g, dest, I, lane, vel, t, s, K);
     const c = g.ctx, d = I.decay, tune = 2 ** (I.tune / 12), out = c.createGain();
     out.gain.value = vel; out.connect(dest);
@@ -284,10 +317,32 @@ L.engine = (() => {
       case 4: noise('highpass', 7000, 0.35 * d, 0.4); break;
       case 5: osc('sine', 150, 85, 0.15, 0.35 * d, 0.8); break;
       case 6: osc('square', 1650, 0, 0, 0.025, 0.3); osc('triangle', 480, 0, 0, 0.03, 0.4); break;
+      case 8: { // cowbell: two square waves a little under a fifth apart, through a band-pass, as on the classic drum machines
+        const bp = c.createBiquadFilter(), e = c.createGain();
+        bp.type = 'bandpass'; bp.frequency.value = 2640 * tune; bp.Q.value = 1.4;
+        e.gain.setValueAtTime(0.5, t); e.gain.exponentialRampToValueAtTime(0.12, t + 0.03); e.gain.exponentialRampToValueAtTime(0.001, t + 0.35 * d);
+        bp.connect(e).connect(out);
+        [540, 800].forEach(f => { const o = c.createOscillator(); o.type = 'square'; o.frequency.value = f * tune; o.connect(bp); o.start(t); o.stop(t + 0.36 * d + 0.02); });
+        break;
+      }
       default: noise('highpass', 5000, 1.2 * d, 0.35); noise('bandpass', 9000, 0.6 * d, 0.2, 0.5);
     }
   }
-  const lane = p => ((p - 36) % 8 + 8) % 8;
+  const lane = p => ((p - 36) % L.DRUMS.length + L.DRUMS.length) % L.DRUMS.length;
+
+  // Sidechain: a track with the effect on dips in volume each time its trigger plays, then swells back,
+  // so the kick cuts through (or, set deep, the pumping sound of dance music).
+  function duckFrom(g, proj, src, nt, time) {
+    for (const d of proj.tracks) {
+      const f = d.fx.duck;
+      if (!f || !f.on || d === src) continue;
+      if (f.src ? f.src !== src.id : !(src.type === 'drums' && lane(nt.p) === 0)) continue;
+      const n = g.tracks.get(d.id); if (!n) continue;
+      const p = n.duck.gain;
+      p.setTargetAtTime(1 - f.amt, time, 0.004);
+      p.setTargetAtTime(1, time + 0.035, Math.max(0.01, f.rel) / 3);
+    }
+  }
 
   function startAudio(g, proj, n, c, from, b2t, limit) {
     const buf = L.buffers.get(c.buf); if (!buf) return;
@@ -296,16 +351,16 @@ L.engine = (() => {
     if (dur <= 0 || off >= buf.duration) return;
     const s = g.ctx.createBufferSource(), gn = g.ctx.createGain();
     s.buffer = buf; gn.gain.value = c.gain ?? 1;
-    s.connect(gn).connect(n.in);
+    s.connect(gn).connect(n.in); bendOn(n.in, s);
     s.start(b2t(from), off, dur);
     const v = { kill() { try { s.stop(); } catch { /* not started */ } } };
-    s.onended = () => g.live.delete(v);
+    s.onended = () => { g.live.delete(v); bendOff(n.in, s); };
     g.live.add(v);
   }
 
   // Schedules everything that starts in beats [a, b).
   function scheduleRange(g, proj, a, b, b2t, limit) {
-    const spb = 60 / proj.bpm;
+    const spb = 60 / proj.bpm, ducking = proj.tracks.some(x => x.fx.duck && x.fx.duck.on);
     for (const t of proj.tracks) {
       const n = g.tracks.get(t.id); if (!n) continue;
       for (const c of t.clips) {
@@ -322,6 +377,7 @@ L.engine = (() => {
             const time = b2t(s) + (st && st.get(nt) || 0);
             if (t.type === 'drums') drumHit(g, n.in, t.inst, lane(nt.p), nt.v, time);
             else voice(g, n.in, t.inst, nt.p, nt.v, time).release(b2t(s) + Math.min(nt.l, cl - nt.s, c.len - rel) * spb);
+            if (ducking && !t.mute) duckFrom(g, proj, t, nt, time);
           }
         }
       }
@@ -332,10 +388,15 @@ L.engine = (() => {
   const AUTO = {
     vol: { name: 'Volume', def: () => 1, prm: n => n.auto.gain, val: v => v * v, fmt: v => Math.round(v * 100) + '% (' + L.db(v * v) + ' dB)' },
     pan: { name: 'Pan', def: t => (t.pan + 1) / 2, prm: n => n.pan.pan, val: v => v * 2 - 1, fmt: v => Math.abs(v - 0.5) < 0.01 ? 'Centre' : Math.round(Math.abs(v * 200 - 100)) + '% ' + (v < 0.5 ? 'left' : 'right') },
-    cut: { name: 'Filter', def: () => 1, prm: n => n.flt.frequency, val: v => 60 * 2 ** (v * 8.35), exp: true, fmt: v => v > 0.995 ? 'Open' : Math.round(60 * 2 ** (v * 8.35)) + ' Hz' },
+    muf: { name: 'Muffle', def: t => t.fx.muffle && t.fx.muffle.on ? t.fx.muffle.amt : 0, prm: n => n.flt.frequency, val: v => MUF(v), exp: true, fmt: v => v < 0.005 ? 'Clear' : Math.round(v * 100) + '% muffled (' + Math.round(MUF(v)) + ' Hz)' },
+    bend: { name: 'Pitch bend', def: () => 0.5, prm: n => n.bend.offset, val: v => BEND(v) * 100, fmt: v => { const st = BEND(v); return st ? (st > 0 ? '+' : '') + st + ' semitone' + (Math.abs(st) === 1 ? '' : 's') : 'In tune'; } },
     rev: { name: 'Reverb', def: t => t.fx.reverb.mix, prm: n => n.rWet.gain, val: v => v * 1.6, fx: 'reverb', fmt: v => Math.round(v * 100) + '% reverb' },
     dly: { name: 'Echo', def: t => t.fx.delay.mix, prm: n => n.dWet.gain, val: v => v, fx: 'delay', fmt: v => Math.round(v * 100) + '% echo' },
   };
+  // muffle: 0 leaves the sound clear, 1 sounds like music through a wall
+  function MUF(v) { return 20000 * 2 ** (-v * 6.6); }
+  // pitch bend: up to an octave either way, in half-semitone steps (the middle of the lane is in tune)
+  function BEND(v) { return Math.round((v * 2 - 1) * 24) / 2; }
   const autoPts = (t, k) => t.auto && t.auto[k] && t.auto[k].length ? t.auto[k] : null;
   function autoAt(pts, beat, def = 1) {
     if (!pts || !pts.length) return def;
@@ -388,7 +449,7 @@ L.engine = (() => {
   E.reconcile = () => {
     if (!G) return;
     const p = L.project, ids = new Set(p.tracks.map(t => t.id));
-    for (const [id, n] of G.tracks) if (!ids.has(id)) { n.vol.disconnect(); n.auto.disconnect(); n.cLfo.stop(); G.tracks.delete(id); }
+    for (const [id, n] of G.tracks) if (!ids.has(id)) { n.vol.disconnect(); n.auto.disconnect(); n.cLfo.stop(); n.bend.stop(); G.tracks.delete(id); }
     p.tracks.forEach(t => { if (!G.tracks.has(t.id)) addTrack(G, t); });
     syncAll(G, p);
   };
@@ -451,6 +512,7 @@ L.engine = (() => {
     L.pos = E.currentBeat(); E.playing = false;
     for (const v of [...G.live]) v.kill();
     G.live.clear(); held.clear();
+    for (const n of G.tracks.values()) { n.duck.gain.cancelScheduledValues(0); n.duck.gain.value = 1; }
     autoHold(G, L.project, L.pos);
     if (E.recording) finishRec();
     L.emit('transport');
@@ -470,7 +532,7 @@ L.engine = (() => {
     const t = L.trackById(trackId); if (!t || t.type === 'audio') return;
     ensure();
     const n = G.tracks.get(t.id); if (!n) return;
-    if (t.type === 'drums') { pitch = 36 + lane(pitch); drumHit(G, n.in, t.inst, pitch - 36, vel, ctx.currentTime); }
+    if (t.type === 'drums') { pitch = 36 + lane(pitch); drumHit(G, n.in, t.inst, pitch - 36, vel, ctx.currentTime); duckFrom(G, L.project, t, { p: pitch }, ctx.currentTime); }
     else { if (held.has(pitch)) return; held.set(pitch, voice(G, n.in, t.inst, pitch, vel, ctx.currentTime)); }
     L.emit('note', { p: pitch, on: true });
     if (rec && rec.midi && rec.track === t.id) {
@@ -484,6 +546,11 @@ L.engine = (() => {
     if (v) { v.release(ctx.currentTime, true); held.delete(pitch); }
     const nt = rec && rec.open.get(pitch);
     if (nt) { nt.l = Math.max(0.05, (at ?? E.currentBeat()) - nt.s); rec.open.delete(pitch); }
+  };
+  // a MIDI keyboard's pitch wheel: -1..1, two semitones each way, on the selected track
+  E.wheel = x => {
+    const t = L.trackById(L.sel.track); if (!t || !G || autoPts(t, 'bend')) return;
+    const n = G.tracks.get(t.id); if (n) n.bend.offset.setTargetAtTime(x * 200, ctx.currentTime, 0.01);
   };
   E.blip = (trackId, pitch) => { E.noteOn(pitch, 0.8, trackId); setTimeout(() => E.noteOff(pitch), 180); };
 
@@ -591,7 +658,7 @@ L.engine = (() => {
     if (me.g) {
       for (const v of me.g.live) v.kill();
       me.g.master.gain.setTargetAtTime(0, ctx.currentTime, 0.04);
-      setTimeout(() => { me.g.an.disconnect(); me.g.tracks.forEach(n => n.cLfo.stop()); }, 300);
+      setTimeout(() => { me.g.an.disconnect(); me.g.tracks.forEach(n => { n.cLfo.stop(); n.bend.stop(); }); }, 300);
     }
     if (me.onEnd) me.onEnd();
   };

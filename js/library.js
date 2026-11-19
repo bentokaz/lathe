@@ -29,14 +29,20 @@ L.lib = (() => {
     ['Sampled sound effects', 'guitar_fret_noise breath_noise seashore bird_tweet telephone_ring helicopter applause gunshot'],
   ];
   const KITS = [['Standard', 0, 1], ['Tight', 3, 0.6], ['Low and slow', -9, 1.3], ['Bright', 6, 0.85], ['Roomy', -2, 1.45],
-    ['Drum machine', 0, 1], ['Deep 808', -5, 1.7], ['Gated', 0, 0.42], ['Bedroom machine', 2, 0.55]];
+    ['Hard and distorted', 0, 1], ['Drum machine', 0, 1], ['Deep 808', -5, 1.7], ['Gated', 0, 0.42], ['Bedroom machine', 2, 0.55]];
   // Kits played from recordings of a real drum kit (Hydrogen's GM kit, five strengths of hit per drum).
   // The others are drum machines made from oscillators and noise.
-  // lp/hs: a low-pass or high-shelf on every hit; room: reverb switched on when the kit is picked.
-  const ACOUSTIC = { Standard: {}, Tight: {}, 'Low and slow': { lp: 4200 }, Bright: { hs: 5 }, Roomy: { room: true } };
+  // lp/hs: a low-pass or high-shelf on every hit; room: reverb switched on when the kit is picked;
+  // hardKick: a driven, clipped kick in place of the recorded one; drive: the other drums run a little hot.
+  const ACOUSTIC = { Standard: {}, Tight: {}, 'Low and slow': { lp: 4200 }, Bright: { hs: 5 }, Roomy: { room: true }, 'Hard and distorted': { hardKick: true, drive: 0.12 } };
   const DKIT = 'https://smpldsnds.github.io/hydrogen-drum-samples/', LAYERS = ['Softest', 'Soft', 'Med', 'Hard', 'Hardest'];
-  // one per drum lane: Kick, Snare, Clap, Hat, Open hat, Tom, Rim, Crash
-  const DFILES = [['h2ogmbd/Kick', 5], ['h2ogmsn/Snare', 5], ['h2ogmcp/HandClap', 1], ['h2ogmhh/HatClosed', 5], ['h2ogmhh/HatOpen', 5], ['h2ogmmt/Tom2', 5], ['h2ogmsn/SideStick', 5], ['h2ogmcy/Crash', 5]];
+  // one per drum lane: Kick, Snare, Clap, Hat, Open hat, Tom, Rim, Crash, Cowbell
+  const DFILES = [['h2ogmbd/Kick', 5], ['h2ogmsn/Snare', 5], ['h2ogmcp/HandClap', 1], ['h2ogmhh/HatClosed', 5], ['h2ogmhh/HatOpen', 5], ['h2ogmmt/Tom2', 5], ['h2ogmsn/SideStick', 5], ['h2ogmcy/Crash', 5], ['h2ogmcb/Cowbell', 5]];
+  // Choirs recorded on Mellotron and Chamberlin tape: real singers holding "aah", one recording per note.
+  // up: these sets sound an octave above their file names.
+  const MT = 'https://smpldsnds.github.io/archiveorg-mellotron/';
+  const CHOIRS = [['Choir aahs', '8VOICE CHOIR', 0, 'mixed choir, eight voices'], ['Boys choir', 'BOYS CHOIR', 12, 'boys choir'], ['Female voices', 'CHMB FEMALE', 12, 'women singing'], ['Male voices', 'CHMB MALE VC', 0, 'men singing']];
+  const choirOf = name => CHOIRS.find(c => 'mt:' + c[1] === name);
   // Ready-made sounds: a library instrument plus the effects that make it what it is.
   // Plucked-string models: bright = pick vs finger, decay = ring time (s), pos = where along the string,
   // body = main wooden-body resonance (Hz, 0 for solid electric), tone = final low-pass, strum = gap between strings (s).
@@ -62,11 +68,12 @@ L.lib = (() => {
     ['Mellow lead', 'synth:Whistle', {}, { chorus: { rate: 0.7, depth: 0.4, mix: 0.35 }, delay: { time: 0.5, fb: 0.3, mix: 0.2 }, reverb: { size: 2.2, mix: 0.25 } }],
     ['Bedroom bass', 'gm:electric_bass_finger', {}, { eq: { low: 2, mid: 0, high: -6 }, comp: { thr: -20, ratio: 4 } }],
   ];
-  const nice = n => { const s = n.replace(/^(lead|pad|fx)_\d_/, '').replace(/_+/g, ' '); return s[0].toUpperCase() + s.slice(1); };
+  const nice = n => { if (choirOf(n)) return choirOf(n)[0]; const s = n.replace(/^(lead|pad|fx)_\d_/, '').replace(/_+/g, ' '); return s[0].toUpperCase() + s.slice(1); };
 
   const ALL = [
     { name: 'Guitars, ukulele and plucked strings', items: PLUCKS.map(([label, pluck, strum, r]) => ({ kind: 'pluck', label, pluck, strum, r })) },
     { name: 'Built-in synth', items: Object.keys(L.PRESETS).map(k => ({ kind: 'synth', label: k })) },
+    { name: 'Recorded choirs', items: CHOIRS.map(([label, dir, , tag]) => ({ kind: 'gm', name: 'mt:' + dir, label, tag })) },
     { name: 'Indie and dream pop', items: COMBOS.map(([label, base, inst, fx]) => ({ kind: 'combo', label, base, inst, fx })) },
     { name: 'Drum kits', items: KITS.map(([label, tune, decay]) => ({ kind: 'kit', label, tune, decay })) },
     { name: 'Find any sound effect', search: true, items: [] },
@@ -131,6 +138,7 @@ L.lib = (() => {
     L.emit('loading', ++pending);
     s.promise = (async () => {
       try {
+        if (choirOf(name)) await loadChoir(s, choirOf(name)); else {
         let res = null;
         const first = fontOf(name, font);
         for (const f of [first, ...FONTS.filter(x => x !== first)]) { try { res = await fetch(HOST + f + name + '-mp3.js'); if (res.ok) break; } catch { res = null; } }
@@ -143,6 +151,7 @@ L.lib = (() => {
           jobs.push(L.engine.decode(unb64(m[3])).then(b => { const meta = prep(b, p); if (meta) { s.bufs.set(p, b); s.meta.set(p, meta); } }, () => {}));
         }
         await Promise.all(jobs);
+        }
         if (!s.bufs.size) throw new Error('no samples');
         s.keys = [...s.bufs.keys()].sort((a, b) => a - b);
         const louds = [...s.meta.values()].map(m => m.loud).sort((a, b) => a - b);
@@ -158,6 +167,21 @@ L.lib = (() => {
     })();
     s.promise.finally(() => L.emit('loading', --pending));
     return s.promise;
+  }
+  // every other note of the choir (a voice moved more than a semitone starts to sound like a cartoon)
+  async function loadChoir(s, [, dir, up]) {
+    const PCS = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
+    const url = f => MT + encodeURIComponent(dir) + '/' + encodeURIComponent(f);
+    const names = await (await fetch(url('files.json'))).json();
+    await Promise.all(names.map(async f => {
+      const m = /^([A-G]#?)(\d)/.exec(f); if (!m) return;
+      const p = 12 * (+m[2] + 2) + PCS[m[1]] + up;
+      if (p % 2) return;
+      try {
+        const b = await L.engine.decode(await (await fetch(url(f + '.m4a'))).arrayBuffer()), meta = prep(b, p);
+        if (meta) { s.bufs.set(p, b); s.meta.set(p, meta); }
+      } catch { /* one missing note is filled by its neighbours */ }
+    }));
   }
   function sample(name, pitch, font) {
     const s = sets.get(keyOf(name, font));
@@ -176,10 +200,11 @@ L.lib = (() => {
       try {
         const get = async name => L.engine.decode(await (await fetch(DKIT + name + '.m4a')).arrayBuffer());
         k.bufs = await Promise.all(DFILES.map(([f, n]) => Promise.all((n === 1 ? [''] : LAYERS).map(l => get(f + (l && '-' + l))))));
-        // one level for the whole kit, so the drums keep their balance with each other
-        let pk = 0;
-        for (const b of k.bufs.flat()) { const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i])); }
+        // one level for the whole kit, so the drums keep their balance with each other (the cowbell is set on its own)
+        const peak = bs => { let pk = 0; for (const b of bs) { const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i])); } return pk; };
+        const pk = peak(k.bufs.slice(0, 8).flat()), cb = peak(k.bufs[8]);
         k.norm = pk ? 0.9 / pk : 1;
+        k.gains = k.bufs.map((_, i) => i === 8 ? (cb ? 0.5 / cb : 1) : k.norm);
         k.ready = true;
         return true;
       } catch {
@@ -195,7 +220,7 @@ L.lib = (() => {
   function drum(lane, vel) {
     if (!kit || !kit.ready) { loadKit(); return null; }
     const set = kit.bufs[lane], i = set.length === 1 ? 0 : L.clamp(Math.round((vel - 0.25) / 0.75 * 4), 0, 4);
-    return { buf: set[i], gain: kit.norm };
+    return { buf: set[i], gain: kit.gains[lane] };
   }
   const acoustic = preset => ACOUSTIC[preset] || null;
   const needsKit = p => p.tracks.some(t => t.type === 'drums' && t.inst && ACOUSTIC[t.inst.preset]);
@@ -229,12 +254,12 @@ L.lib = (() => {
     const k0 = CATS[cat].items[0].kind, place = !query && (k0 === 'sfx' || k0 === 'loop');
     host.querySelector('.lib-head').innerHTML = place ? `<h2>${head}</h2><p>Click one to put it in the song at the playhead (bar ${Math.floor(L.pos / 4) + 1}). Build-ups and fills <b>end</b> at the playhead, so put it where the drop lands. ${k0 === 'sfx' ? 'Effects are made to fit your tempo. Need something else, like a door, a crowd or rain? Use <b>Find any sound effect</b>.' : 'Loops use the kit on your drum track, and you can change any hit in the Editor.'}</p>` : `<h2>${head}</h2><p>${note}${CATS[cat].items[0].kind === 'gm' || query ? ' Sampled instruments download on first use and come with a touch of reverb.' : ''}</p>`;
     host.querySelector('.lib-list').innerHTML = items.length ? items.map(it => {
-      const s = it.kind === 'gm' && sets.get(keyOf(it.name)), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : 'sampled') : it.kind === 'kit' ? (ACOUSTIC[it.label] ? 'recorded kit' : 'drum machine') : it.kind === 'sfx' ? (it.lead ? 'build-up' : 'effect') : it.kind === 'loop' ? (it.lead ? 'fill' : (it.bars || 1) >= 1 ? `${it.bars || 1} bar loop` : 'hit') : it.kind === 'pluck' ? 'modelled' : it.kind === 'combo' ? 'with effects' : 'synth';
+      const s = it.kind === 'gm' && sets.get(keyOf(it.name)), tag = it.kind === 'gm' ? (s ? (s.ready ? 'loaded' : 'loading') : it.tag || 'sampled') : it.kind === 'kit' ? (ACOUSTIC[it.label] ? 'recorded kit' : 'drum machine') : it.kind === 'sfx' ? (it.lead ? 'build-up' : 'effect') : it.kind === 'loop' ? (it.lead ? 'fill' : (it.bars || 1) >= 1 ? `${it.bars || 1} bar loop` : 'hit') : it.kind === 'pluck' ? 'modelled' : it.kind === 'combo' ? 'with effects' : 'synth';
       return `<button class="${isCur(it, I) ? 'cur' : ''}" data-k="${it.kind}" data-l="${esc(it.label)}"${it.name ? ` data-n="${it.name}"` : ''}><span>${esc(it.label)}</span><small>${tag}</small></button>`;
     }).join('') : '<p class="lib-none">Nothing by that name.</p>';
   }
 
-  const byKey = key => { const [kind, name] = key.split(':'); return ALL.flatMap(c => c.items).find(it => it.kind === kind && (kind === 'gm' ? it.name : it.label) === name) || null; };
+  const byKey = key => { const i = key.indexOf(':'), kind = key.slice(0, i), name = key.slice(i + 1); return ALL.flatMap(c => c.items).find(it => it.kind === kind && (kind === 'gm' ? it.name : it.label) === name) || null; };
   // Puts a library sound on a track.
   function apply(t, it) {
     if (it.kind === 'kit') { t.inst = { preset: it.label, tune: it.tune, decay: it.decay }; if (ACOUSTIC[it.label]?.room && !t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 1.1, mix: 0.2 }); }
@@ -245,6 +270,7 @@ L.lib = (() => {
       for (const [k, v] of Object.entries(it.fx)) Object.assign(t.fx[k], v, { on: true });
     }
     else if (it.kind === 'pluck') { t.inst = { preset: it.label, pluck: { ...it.pluck }, strum: it.strum, r: it.r, gain: 1 }; if (!t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 1.4, mix: 0.12 }); }
+    else if (choirOf(it.name)) { t.inst = { preset: it.label, sf: it.name, gain: 1, r: 0.7, strum: 0 }; if (!t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 2.8, mix: 0.24 }); }
     else { t.inst = { preset: it.label, sf: it.name, gain: 1, r: 0.3, strum: /guitar|banjo|shamisen|koto|sitar|harp/.test(it.name) ? 0.016 : 0 }; if (!t.fx.reverb.on) Object.assign(t.fx.reverb, { on: true, size: 1.6, mix: 0.14 }); }
   }
   function pick(it) {
@@ -272,5 +298,5 @@ L.lib = (() => {
     else if (b) pick(ALL.flatMap(x => x.items).find(it => it.kind === b.dataset.k && it.label === b.dataset.l && (it.name || '') === (b.dataset.n || '')));
   });
 
-  return { render, sample, ensure, ready, load, byKey, apply, drum, acoustic, loadKit, TOTAL, names: () => GM.flatMap(g => g[1].split(' ')), base: BASE };
+  return { render, sample, ensure, ready, load, byKey, apply, drum, acoustic, loadKit, choir: n => !!choirOf(n), TOTAL, names: () => GM.flatMap(g => g[1].split(' ')), base: BASE };
 })();

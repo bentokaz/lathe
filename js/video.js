@@ -5,6 +5,7 @@ L.video = (() => {
   const { $, esc, clamp } = L, E = L.engine;
   const mon = $('#monitor'), row = $('#vid-row');
   let file = null, el = null, url = '', node = null, gain = null, thumbs = [], thumbStep = 1, token = 0, exporting = false, lastPos = -1;
+  let finding = null; // { my, pct } while looking for cuts
 
   const meta = () => L.project.video || null;
   const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -29,7 +30,7 @@ L.video = (() => {
       if (my !== token) return;
       const m = meta();
       if (m && Math.abs(m.dur - el.duration) > 0.05) { m.dur = el.duration; L.arr.render(); }
-      render(); makeThumbs(my);
+      render(); makeThumbs(my).then(() => { const m2 = meta(); if (my === token && m2 && !m2.cuts) findCuts(); });
     });
     render();
   }
@@ -50,6 +51,107 @@ L.video = (() => {
       thumbs.push(cv.toDataURL('image/jpeg', 0.6));
       if (k % 5 === 4 || k === n - 1) lane();
     }
+  }
+
+  // ---------- cuts: where the picture jumps to a new shot ----------
+  // Each frame is shrunk to a few pixels and compared with the one before: its brightness, pixel by pixel, and
+  // its mix of colours. A cut is a jump far bigger than the frames around it (camera moves change a little every frame).
+  const FW = 48, FH = 27;
+  function feature(x2d) {
+    const d = x2d.getImageData(0, 0, FW, FH).data, luma = new Float32Array(FW * FH), hist = new Float32Array(64);
+    for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+      luma[j] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      hist[(d[i] >> 6) * 16 + (d[i + 1] >> 6) * 4 + (d[i + 2] >> 6)] += 1 / (FW * FH);
+    }
+    return { luma, hist };
+  }
+  function change(a, b) {
+    let dl = 0, dh = 0;
+    for (let i = 0; i < a.luma.length; i++) dl += Math.abs(a.luma[i] - b.luma[i]);
+    for (let i = 0; i < 64; i++) dh += Math.abs(a.hist[i] - b.hist[i]);
+    return 0.5 * dl / a.luma.length / 255 + 0.25 * dh;
+  }
+  function pickCuts(diffs) {
+    const cuts = [];
+    for (let i = 0; i < diffs.length; i++) {
+      const [t, d] = diffs[i];
+      if (d < 0.14) continue;
+      const near = [];
+      for (let j = Math.max(0, i - 8); j <= Math.min(diffs.length - 1, i + 8); j++) if (j !== i) near.push(diffs[j][1]);
+      near.sort((x, y) => x - y);
+      const med = near[near.length >> 1] || 0;
+      if (d < med * 3 + 0.06) continue;
+      // the biggest jump within a third of a second is the cut (a flash or a fast pan can spread one over a few frames)
+      if (cuts.length && t - cuts[cuts.length - 1].t < 0.35) { if (d > cuts[cuts.length - 1].d) cuts[cuts.length - 1] = { t, d }; continue; }
+      cuts.push({ t, d });
+    }
+    return cuts.map(c => +c.t.toFixed(3));
+  }
+  // with Mediabunny: decodes every frame (fast, uses the graphics chip)
+  async function framesFast(my, report) {
+    const M = await L.exporter.lib();
+    const input = new M.Input({ source: new M.BlobSource(file), formats: M.ALL_FORMATS });
+    const track = await input.getPrimaryVideoTrack();
+    if (!track || !(await track.canDecode())) throw new Error('cannot decode');
+    const dur = await input.computeDuration(), sink = new M.CanvasSink(track, { width: FW, height: FH, fit: 'fill', poolSize: 1 });
+    const diffs = [];
+    let prev = null, shown = 0;
+    for await (const { canvas, timestamp } of sink.canvases()) {
+      if (my !== token) return null;
+      const f = feature(canvas.getContext('2d', { willReadFrequently: true }));
+      if (prev) diffs.push([timestamp, change(prev, f)]);
+      prev = f;
+      if (timestamp - shown > 2) { shown = timestamp; report(timestamp / dur); }
+    }
+    return diffs;
+  }
+  // without it: seeks a hidden copy of the video five times a second (slower)
+  async function framesSlow(my, report) {
+    const v = document.createElement('video');
+    v.muted = true; v.preload = 'auto'; v.src = url;
+    await new Promise(r => { v.onloadeddata = r; v.onerror = r; });
+    if (!v.videoWidth) return null;
+    const cv = document.createElement('canvas'); cv.width = FW; cv.height = FH;
+    const x = cv.getContext('2d', { willReadFrequently: true }), diffs = [];
+    let prev = null;
+    for (let t = 0; t < v.duration; t += 0.2) {
+      if (my !== token) return null;
+      await new Promise(r => { const k = setTimeout(r, 1500); v.onseeked = () => { clearTimeout(k); r(); }; v.currentTime = t; });
+      x.drawImage(v, 0, 0, FW, FH);
+      const f = feature(x);
+      if (prev) diffs.push([t, change(prev, f)]);
+      prev = f;
+      if (Math.round(t * 5) % 25 === 0) report(t / v.duration);
+    }
+    return diffs;
+  }
+  async function findCuts() {
+    const my = token;
+    if (!file || (finding && finding.my === my)) return;
+    finding = { my, pct: 0 };
+    const report = f => { finding.pct = Math.round(clamp(f, 0, 1) * 100); lane(); };
+    lane();
+    let diffs = null;
+    try { diffs = await framesFast(my, report); } catch { diffs = null; }
+    if (!diffs && my === token) try { diffs = await framesSlow(my, report); } catch { diffs = null; }
+    if (finding && finding.my === my) finding = null;
+    const m = meta();
+    if (my !== token || !m) return;
+    if (!diffs) { lane(); return L.toast('Could not look through this video for cuts', 5000); }
+    m.cuts = pickCuts(diffs);
+    L.commit();
+    L.toast(m.cuts.length ? `Found ${m.cuts.length} cut${m.cuts.length > 1 ? 's' : ''} in the video. Clips, the playhead and the loop snap to them (hold Shift to stop that)` : 'No cuts found: the video looks like one continuous shot', 6000);
+  }
+  // Where a dragged position should stick: the nearest cut or marker within a few pixels, in beats, or null.
+  function magnet(beat) {
+    const m = meta(); if (!m) return null;
+    const spb = L.spb(), reach = 8 / L.view.ppb;
+    let best = null;
+    for (const t of [...(m.cuts || []), ...m.markers.map(k => k.t)]) {
+      const b = (t + m.offset) / spb;
+      if (Math.abs(b - beat) <= reach && (best === null || Math.abs(b - beat) < Math.abs(best - beat))) best = b;
+    }
+    return best;
   }
 
   // ---------- adding, removing, restoring ----------
@@ -82,8 +184,10 @@ L.video = (() => {
     }
     const old = meta();
     // key: where the file is kept in an account
-    L.project.video = { name: f.name, key: L.uid(), dur: el.duration, offset: old ? old.offset : 0, vol: old ? old.vol : 0.7, markers: old && old.name === f.name ? old.markers : [] };
+    const same = old && old.name === f.name;
+    L.project.video = { name: f.name, key: L.uid(), dur: el.duration, offset: old ? old.offset : 0, vol: old ? old.vol : 0.7, markers: same ? old.markers : [], ...(same && old.cuts ? { cuts: old.cuts } : {}) };
     L.commit();
+    if (!L.project.video.cuts) findCuts();
     L.toast(`${f.name} added (${fmt(el.duration)}). Press play: the picture follows the playhead`, 5000);
   }
   function remove() {
@@ -206,15 +310,22 @@ L.video = (() => {
     row.hidden = !m;
     if (!m) return;
     const ppb = L.view.ppb, spb = L.spb(), k = ppb / spb;
-    row.innerHTML = `<div class="thead vhead"><div class="t-no">${L.icon('film')}</div><div class="t-main"><div class="t-name">${esc(m.name)}</div><div class="t-kind">Video / ${fmt(m.dur)}${m.markers.length ? ' / ' + m.markers.length + ' marker' + (m.markers.length > 1 ? 's' : '') : ''}</div></div></div>
+    const cuts = m.cuts || [], status = finding && finding.my === token ? `finding cuts ${finding.pct}%` : cuts.length ? cuts.length + ' cut' + (cuts.length > 1 ? 's' : '') : '';
+    row.innerHTML = `<div class="thead vhead"><div class="t-no">${L.icon('film')}</div><div class="t-main"><div class="t-name">${esc(m.name)}</div><div class="t-kind">Video / ${fmt(m.dur)}${status ? ' / ' + status : ''}${m.markers.length ? ' / ' + m.markers.length + ' marker' + (m.markers.length > 1 ? 's' : '') : ''}</div></div></div>
       <div class="lane vlane"><div class="vclip" style="left:${m.offset * k}px;width:${m.dur * k}px" title="Drag to move the video in time">
         ${thumbs.map((src, i) => `<img src="${src}" style="left:${i * thumbStep * k}px" draggable="false" alt="">`).join('')}
+        ${cuts.map((t, i) => `<i class="cut" data-cut="${i}" style="left:${t * k}px" title="Cut at ${fmt(t)}.${String(Math.floor(t * 10) % 10)}: click to jump here, right-click to forget it"></i>`).join('')}
         ${m.markers.map((mk, i) => `<i class="mk" data-mk="${i}" style="left:${mk.t * k}px" title="${esc(mk.name)}: click to jump, double-click to rename, right-click to remove"><b>${esc(mk.name)}</b></i>`).join('')}
       </div></div>`;
   }
-  row.addEventListener('contextmenu', e => { if (e.target.closest('.mk')) e.preventDefault(); });
+  row.addEventListener('contextmenu', e => { if (e.target.closest('.mk, .cut')) e.preventDefault(); });
   row.addEventListener('pointerdown', e => {
-    const m = meta(), mk = e.target.closest('.mk'), clip = e.target.closest('.vclip'); if (!m) return;
+    const m = meta(), mk = e.target.closest('.mk'), clip = e.target.closest('.vclip'), cut = e.target.closest('.cut'); if (!m) return;
+    if (cut) {
+      const i = +cut.dataset.cut;
+      if (e.button === 2) { m.cuts.splice(i, 1); return L.commit(); }
+      return E.seek((m.cuts[i] + m.offset) / L.spb());
+    }
     if (mk) {
       const i = +mk.dataset.mk;
       if (e.button === 2) { m.markers.splice(i, 1); return L.commit(); }
@@ -289,5 +400,5 @@ L.video = (() => {
   $('#f-video').onchange = e => { const f = e.target.files[0]; e.target.value = ''; add(f); };
   L.on('change', sync);
 
-  return { add, restore, lane, tick, exportVideo, has: () => !!meta(), file: () => file };
+  return { add, restore, lane, tick, exportVideo, magnet, findCuts, has: () => !!meta(), file: () => file };
 })();
