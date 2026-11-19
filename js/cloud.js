@@ -21,7 +21,10 @@ L.cloud = (() => {
   }
   L.on('savestate', st => {
     status(st);
-    if (st === 'local' && user) { dirty = true; clearTimeout(timer); timer = setTimeout(sync, 2500); }
+    // a song made together saves sooner, so recorded audio reaches the others quickly
+    if (st === 'local' && user) { dirty = true; clearTimeout(timer); timer = setTimeout(sync, L.project && L.project.live ? 900 : 2500); }
+    // someone else's change: they save it themselves, so this is only a safety copy
+    else if (st === 'quiet' && user && !dirty) { dirty = true; clearTimeout(timer); timer = setTimeout(sync, 15000); }
   });
 
   // ---------- account ----------
@@ -39,23 +42,68 @@ L.cloud = (() => {
         status();
         renderAcct();
         if (user && user.id !== was) { dirty = true; sync(); }
+        if ((user && user.id) !== was) L.emit('auth', user);
       });
       const { data } = await c.auth.getSession();
       user = data.session ? data.session.user : null;
       status();
     } catch { failed = true; status(); }
+    L.emit('auth', user);
   }
+  const ready = start();
 
   const wavBlob = b => new Blob([L.wav(b)], { type: 'audio/wav' });
   const upKey = () => 'lathe.up.' + user.id;
   const uploaded = () => { try { return new Set(JSON.parse(localStorage.getItem(upKey())) || []); } catch { return new Set(); } };
+  const markUp = id => { const up = uploaded(); up.add(id); try { localStorage.setItem(upKey(), JSON.stringify([...up])); } catch { /* storage full */ } };
+
+  // Recorded audio and video live in the folder of whoever recorded or added them. For a song made together
+  // that can be anyone in it, so look in the likely folders first and then in everyone's.
+  const folks = new Map();
+  async function people(songId, fresh) {
+    const k = folks.get(songId);
+    if (k && !fresh && Date.now() - k.at < 30000) return k.ids;
+    const c = await client(), ids = [];
+    try {
+      const { data: s } = await c.from('songs').select('owner').eq('id', songId).maybeSingle();
+      if (s) ids.push(s.owner);
+      const { data: m } = await c.from('song_members').select('user_id').eq('song_id', songId);
+      for (const r of m || []) ids.push(r.user_id);
+    } catch { /* tables from before working together */ }
+    folks.set(songId, { at: Date.now(), ids });
+    return ids;
+  }
+  async function fetchFile(file, songId, first = []) {
+    if (!user) return null;
+    const c = await client(), tried = new Set();
+    for (const who of [...first, user.id, ...(songId ? await people(songId) : [])]) {
+      if (!who || tried.has(who)) continue;
+      tried.add(who);
+      try { const r = await c.storage.from('audio').download(`${who}/${file}`); if (r.data) return r.data; } catch { /* not there */ }
+    }
+    return null;
+  }
+  // Fills in recorded audio the song needs: from this browser if it is here, otherwise from the account.
+  async function getAudio(p, first) {
+    let missing = [...L.usedBuffers(p)].filter(b => !L.buffers.has(b));
+    if (!missing.length) return true;
+    await L.loadBuffers(new Set(missing));
+    missing = missing.filter(b => !L.buffers.has(b));
+    for (const b of missing) {
+      const blob = await fetchFile(b + '.wav', p.id, first);
+      if (!blob) continue;
+      L.addBuffer(await E.decode(await blob.arrayBuffer()), b);
+      if (user) markUp(b); // it is already in someone's folder: no need for a second copy
+    }
+    return missing.every(b => L.buffers.has(b));
+  }
 
   // Saves the open song to the account.
   async function sync() {
     clearTimeout(timer);
     if (!user || busy || !dirty || !L.project) return;
     // like the list in this browser, an empty song is not worth keeping yet
-    if (!L.project.tracks.some(t => t.clips.length) && !L.project.video) { dirty = false; return status(); }
+    if (!L.project.tracks.some(t => t.clips.length) && !L.project.video && !L.project.live) { dirty = false; return status(); }
     busy = true; dirty = false; status();
     try {
       const c = await client(), p = L.project;
@@ -71,9 +119,11 @@ L.cloud = (() => {
       if (p.video && !p.video.key) p.video.key = L.uid();
       const data = JSON.parse(JSON.stringify(p));
       let { error } = await c.from('songs').upsert({ id: p.id, name: p.name, data, updated_at: new Date().toISOString() });
-      // someone else's song with the same id (opened from their project file): save this as a new song
+      // someone else's song with the same id (opened from their project file, or a song you were taken out of):
+      // save this as a new song
       if (error && (error.code === '42501' || /row-level security/i.test(error.message))) {
-        p.id = L.songId(); L.commit();
+        if (p.live) { delete p.live; L.toast('You are no longer in this shared song, so your copy is now a song of your own', 8000); }
+        p.id = L.songId(); L.commit(); L.emit('auth', user);
         ({ error } = await c.from('songs').upsert({ id: p.id, name: p.name, data: { ...data, id: p.id }, updated_at: new Date().toISOString() }));
       }
       if (error) throw error;
@@ -124,28 +174,22 @@ L.cloud = (() => {
     await conv.execute();
     return new Blob([output.target.buffer], { type: 'video/mp4' });
   }
-  async function fetchVideo(key) {
-    if (!user) return null;
-    try { const r = await (await client()).storage.from('audio').download(`${user.id}/video-${key}`); return r.data || null; } catch { return null; }
-  }
+  const fetchVideo = (key, songId) => fetchFile('video-' + key, songId || (L.project && L.project.id));
 
   async function cloudList() {
     if (!user) return [];
-    const { data, error } = await (await client()).from('songs').select('id,name,updated_at').order('updated_at', { ascending: false });
+    const c = await client();
+    let { data, error } = await c.from('songs').select('id,name,updated_at,owner,share_code,owner_name').order('updated_at', { ascending: false });
+    if (error) ({ data, error } = await c.from('songs').select('id,name,updated_at,owner').order('updated_at', { ascending: false }));
     if (error) throw error;
-    return data.map(r => ({ id: r.id, name: r.name, at: Date.parse(r.updated_at) }));
+    return data.map(r => ({ id: r.id, name: r.name, at: Date.parse(r.updated_at), theirs: r.owner !== user.id ? r.owner_name || 'someone' : null, shared: !!r.share_code }));
   }
   async function cloudGet(id) {
     const c = await client();
-    const { data, error } = await c.from('songs').select('data').eq('id', id).single();
+    const { data, error } = await c.from('songs').select('data,updated_at').eq('id', id).single();
     if (error) throw error;
-    const p = data.data;
-    for (const b of L.usedBuffers(p)) {
-      if (L.buffers.has(b)) continue;
-      const r = await c.storage.from('audio').download(`${user.id}/${b}.wav`);
-      if (r.data) L.addBuffer(await E.decode(await r.data.arrayBuffer()), b);
-    }
-    return p;
+    data.data.id = id;
+    return { p: data.data, at: Date.parse(data.updated_at) };
   }
 
   // ---------- My songs dialog ----------
@@ -176,7 +220,7 @@ L.cloud = (() => {
     try { online = await cloudList(); note = ''; } catch { note = user ? 'Could not reach your account just now; showing songs in this browser.' : ''; }
     const map = new Map();
     for (const r of local) map.set(r.id, { id: r.id, name: r.name, at: r.at, here: true });
-    for (const r of online) { const m = map.get(r.id); if (m) { m.cloud = true; m.at = Math.max(m.at, r.at); } else map.set(r.id, { ...r, cloud: true }); }
+    for (const r of online) { const m = map.get(r.id); if (m) { Object.assign(m, { cloud: true, theirs: r.theirs, shared: r.shared }); m.at = Math.max(m.at, r.at); } else map.set(r.id, { ...r, cloud: true }); }
     rows = [...map.values()].sort((a, b) => b.at - a.at);
     draw();
   }
@@ -189,22 +233,25 @@ L.cloud = (() => {
       <div class="sg-list">${rows.length ? rows.map(r => `
         <div class="sg-row${r.id === cur ? ' cur' : ''}" data-id="${esc(r.id)}">
           <button class="sg-name" data-a="open" title="${r.id === cur ? 'This song is open' : 'Open'}"><b>${esc(r.name || 'Untitled')}</b><small>${r.id === cur ? 'Open now' : when(r.at)}</small></button>
-          <span class="sg-where">${r.cloud && r.here ? 'Browser + account' : r.cloud ? 'Account' : 'This browser'}</span>
+          <span class="sg-where">${r.theirs ? 'Shared by ' + esc(r.theirs) : r.shared ? 'Shared' : r.cloud && r.here ? 'Browser + account' : r.cloud ? 'Account' : 'This browser'}</span>
           ${user && !r.cloud && r.id === cur ? '' : user && !r.cloud ? '<button data-a="upload" title="Save this song to your account">' + L.icon('cloud') + '</button>' : ''}
           <button data-a="rename" class="ib" title="Rename" aria-label="Rename">${L.icon('pen')}</button>
-          <button data-a="del" class="ib" title="${r.id === cur ? 'Open another song first to delete this one' : 'Delete'}" aria-label="Delete"${r.id === cur ? ' disabled' : ''}>${L.icon('trash')}</button>
+          <button data-a="del" class="ib" title="${r.id === cur ? 'Open another song first to ' + (r.theirs ? 'leave' : 'delete') + ' this one' : r.theirs ? 'Leave this shared song' : 'Delete'}" aria-label="${r.theirs ? 'Leave' : 'Delete'}"${r.id === cur ? ' disabled' : ''}>${L.icon('trash')}</button>
         </div>`).join('') : '<p class="sg-none">No songs yet.</p>'}</div>`;
     renderAcct();
   }
 
-  async function openSong(id) {
-    if (id === L.project.id) return dlg.close();
+  // Opens a song: the copy in this browser, unless the account has a newer one (someone else worked on it).
+  async function openSong(id, force) {
+    if (id === L.project.id && !force) return dlg.close();
     try {
       L.toast('Opening…', 0);
-      let p = null;
-      try { p = await L.songs.get(id); } catch { /* not in this browser */ }
-      if (!p) p = await cloudGet(id);
-      else { const missing = [...L.usedBuffers(p)].filter(b => !L.buffers.has(b)); if (missing.length) await L.loadBuffers(new Set(missing)); }
+      let p = null, at = 0, online = null;
+      try { const r = await L.idbGet('songs', id); if (r) { p = JSON.parse(r.json); at = r.at; } } catch { /* not in this browser */ }
+      if (user) try { online = await cloudGet(id); } catch (err) { if (!p) throw err; }
+      if (online && (!p || online.at > at)) p = online.p;
+      if (!p) throw new Error('it is not in this browser or your account');
+      if (!await getAudio(p) && user) L.toast('Some recorded audio for this song could not be found yet', 6000);
       E.stop();
       await L.video.restore(p);
       L.setProject(p);
@@ -268,7 +315,13 @@ L.cloud = (() => {
       }
       refresh();
     } else if (a === 'del') {
-      if (!await L.ask(`Delete "${esc(row.name)}"${row.cloud ? ' from this browser and your account' : ''}? This cannot be undone.`, 'Delete', 'Keep it')) return;
+      if (row.theirs) {
+        if (!await L.ask(`Leave "${esc(row.name)}"? It goes from your list, and you need a new invite to get back in.`, 'Leave', 'Stay')) return;
+        await (await client()).from('song_members').delete().eq('song_id', id).eq('user_id', user.id);
+        await L.songs.del(id).catch(() => {});
+        return refresh();
+      }
+      if (!await L.ask(`Delete "${esc(row.name)}"${row.cloud ? ' from this browser and your account' : ''}?${row.shared ? ' Everyone you shared it with loses it too.' : ''} This cannot be undone.`, 'Delete', 'Keep it')) return;
       if (row.here) await L.songs.del(id).catch(() => {});
       if (row.cloud) await (await client()).from('songs').delete().eq('id', id);
       refresh();
@@ -284,7 +337,20 @@ L.cloud = (() => {
   addEventListener('beforeunload', e => { if (L.savePending() || (user && (dirty || busy))) { e.preventDefault(); e.returnValue = ''; } });
   document.addEventListener('visibilitychange', () => { if (document.hidden && user && dirty) sync(); });
 
+  // saves the open song to the account now, even if it is still empty (to share it)
+  async function saveNow() {
+    if (!user) return false;
+    while (busy) await new Promise(r => setTimeout(r, 200));
+    clearTimeout(timer); dirty = true; busy = true; status();
+    try {
+      const c = await client(), p = L.project;
+      const { error } = await c.from('songs').upsert({ id: p.id, name: p.name, data: JSON.parse(JSON.stringify(p)), updated_at: new Date().toISOString() });
+      if (error) throw error;
+      busy = false; dirty = true; await sync();
+      return !failed;
+    } catch { busy = false; failed = true; status(); return false; }
+  }
+
   status();
-  start();
-  return { open, newSong, fetchVideo, enabled, user: () => user };
+  return { open, newSong, openSong, people, fetchVideo, getAudio, client, saveNow, ready, enabled, user: () => user, msg: m => { msg = m; mode = 'in'; } };
 })();

@@ -33,6 +33,7 @@ Made by bentokaz as a school project.
   Exports render faster than real time.
 - **Video scoring**: add a film and Lathe finds the cuts between shots by itself; clips, the playhead and the loop snap to them (and to your own markers) as you drag. Drop markers on the moments to hit, watch it full screen with the music, and export the film with the music.
 - **My songs**: every song is kept in the browser, with an optional account to open them anywhere (videos included). A share link gives a friend their own copy.
+- **Work together**: **Share** makes an invite link. Everyone who opens it and signs in works on the same song at the same time: each change shows up for the others as it happens, recorded audio included. Coloured initials show who is here, and an outline marks the track and clip each person has picked. Undo only takes back your own changes. The owner can take people out or stop sharing, and anyone who leaves keeps a copy as a song of their own.
 - **Feedback** from the button in the top bar, without signing in to anything.
 - **Tutorial**: 16 steps (gear menu, or the start screen).
 - **14 colour themes** (gear menu).
@@ -69,6 +70,8 @@ Without accounts, Lathe keeps songs in the browser, and **File, Save project fil
 4. In **Project Settings**, find the **Project URL** and the **anon public** key (newer projects call it the **publishable** key; never use the secret or service_role key), and copy both into [`js/config.js`](js/config.js). This key is designed to be public.
 5. Commit and push. Sign-in then appears under the person button and **File, My songs**.
 
+If you switched accounts on before working together was added, run just the part of the script from `-- Working together` down. Working together also uses Supabase Realtime, which is on by default.
+
 ```sql
 create table public.songs (
   id text primary key,
@@ -98,6 +101,61 @@ create table public.feedback (
 alter table public.feedback enable row level security;
 create policy "Anyone can send feedback" on public.feedback for insert to anon, authenticated with check (true);
 grant insert on public.feedback to anon, authenticated;
+
+-- Working together: the owner of a song makes an invite link; whoever opens it and signs in joins the song
+alter table public.songs add column if not exists share_code text;
+alter table public.songs add column if not exists owner_name text;
+create table if not exists public.song_members (
+  song_id text not null references public.songs on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  email text,
+  joined_at timestamptz not null default now(),
+  primary key (song_id, user_id)
+);
+alter table public.song_members enable row level security;
+
+-- is the person signed in the owner of song s, or in it?
+create or replace function public.in_song(s text) returns boolean language sql stable security definer set search_path = '' as $
+  select exists (select 1 from public.songs where id = s and owner = auth.uid())
+      or exists (select 1 from public.song_members where song_id = s and user_id = auth.uid())
+$;
+-- does the person signed in share a song with the person whose id is other?
+create or replace function public.works_with(other text) returns boolean language sql stable security definer set search_path = '' as $
+  select exists (select 1 from public.songs s
+    where (s.owner = auth.uid() or exists (select 1 from public.song_members m where m.song_id = s.id and m.user_id = auth.uid()))
+      and (s.owner::text = other or exists (select 1 from public.song_members m where m.song_id = s.id and m.user_id::text = other)))
+$;
+create or replace function public.join_song(s text, code text) returns text language plpgsql security definer set search_path = '' as $
+declare n text;
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  select name into n from public.songs where id = s and share_code is not null and share_code = code;
+  if n is null then raise exception 'This invite link no longer works'; end if;
+  insert into public.song_members (song_id, user_id, email) values (s, auth.uid(), auth.jwt() ->> 'email') on conflict do nothing;
+  return n;
+end $;
+revoke execute on function public.join_song(text, text) from public, anon;
+grant execute on function public.join_song(text, text) to authenticated;
+
+-- only the owner can change who the song belongs to or its invite link
+create or replace function public.guard_song() returns trigger language plpgsql set search_path = '' as $
+begin
+  if old.owner is distinct from auth.uid() and auth.uid() is not null
+     and (new.owner is distinct from old.owner or new.share_code is distinct from old.share_code or new.owner_name is distinct from old.owner_name) then
+    raise exception 'Only the owner can change how a song is shared';
+  end if;
+  return new;
+end $;
+create trigger guard_song before update on public.songs for each row execute function public.guard_song();
+
+create policy "Members open shared songs" on public.songs for select to authenticated using (public.in_song(id));
+create policy "Members change shared songs" on public.songs for update to authenticated using (public.in_song(id)) with check (public.in_song(id));
+create policy "See who is in your songs" on public.song_members for select to authenticated using (public.in_song(song_id));
+create policy "Leave, or remove people from your song" on public.song_members for delete to authenticated
+  using (user_id = auth.uid() or exists (select 1 from public.songs where id = song_id and owner = auth.uid()));
+grant select, delete on public.song_members to authenticated;
+create policy "Audio of people you make songs with" on storage.objects for select to authenticated
+  using (bucket_id = 'audio' and public.works_with((storage.foldername(name))[1]));
 ```
 
 An account stores only an email address, a password (handled by Supabase, never seen by Lathe) and the songs.

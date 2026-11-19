@@ -4,7 +4,7 @@
 // Otherwise, or if that fails, it is handed to GitHub as a ready-filled issue, and it can always be copied.
 L.feedback = (() => {
   const { $, esc } = L;
-  const REPO = 'bentokaz/lathe', VERSION = '2026.11.19';
+  const REPO = 'bentokaz/lathe', VERSION = '2026.11.19b';
   const C = L.CLOUD || {}, direct = !!(C.url && C.key);
   const errors = [];
 

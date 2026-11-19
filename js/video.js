@@ -202,7 +202,7 @@ L.video = (() => {
     try { const rec = await L.idbGet('vid', 'cur'); if (rec && rec.name === p.video.name) f = rec.blob; } catch { /* no stored video */ }
     if (!f && p.video.key && L.cloud && L.cloud.user()) {
       L.toast('Downloading the video for ' + (p.name || 'this song') + '…', 0);
-      f = await L.cloud.fetchVideo(p.video.key);
+      f = await L.cloud.fetchVideo(p.video.key, p.id);
       L.toast(f ? '' : 'The video for this song is not in your account; add the file again from this computer', f ? 0 : 7000);
       if (f) L.idbPut('vid', 'cur', { blob: f, name: p.video.name }).catch(() => {});
     }

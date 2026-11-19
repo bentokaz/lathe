@@ -126,35 +126,120 @@
     L.emit('sel');
   };
 
-  // ---- history: whole-project snapshots ----
+  // ---- changes ----
+  // A change is a patch: the parts of the song that changed, each part as a whole. The parts are the song's
+  // settings (name, tempo, loop and so on, one by one), the order of the tracks, each track (without its clips,
+  // but with the order of its clips) and each clip. Undo applies the opposite patch, and when people work on a
+  // song together the same patches are what goes between them, so undo only takes back your own changes.
+  const NOT = new Set(['id', 'tracks', 'live']);
+  const snap = p => {
+    const s = { m: {}, o: JSON.stringify(p.tracks.map(t => t.id)), t: {}, c: {} };
+    for (const k in p) if (!NOT.has(k) && p[k] !== undefined) s.m[k] = JSON.stringify(p[k]);
+    for (const t of p.tracks) {
+      const { clips, ...f } = t;
+      s.t[t.id] = JSON.stringify({ f, co: clips.map(c => c.id) });
+      for (const c of clips) s.c[c.id] = JSON.stringify({ t: t.id, v: c });
+    }
+    return s;
+  };
+  // the patch from snapshot a to snapshot b, and the one back
+  const diff = (a, b) => {
+    const fwd = { m: {}, t: {}, c: {} }, back = { m: {}, t: {}, c: {} };
+    let n = 0;
+    const part = (kind, wrap) => {
+      for (const k of new Set([...Object.keys(a[kind]), ...Object.keys(b[kind])])) {
+        if (a[kind][k] === b[kind][k]) continue;
+        fwd[kind][k] = wrap(b[kind][k]); back[kind][k] = wrap(a[kind][k]); n++;
+      }
+    };
+    part('m', j => j === undefined ? [] : [JSON.parse(j)]);
+    part('t', j => j === undefined ? null : JSON.parse(j));
+    part('c', j => j === undefined ? null : JSON.parse(j));
+    if (a.o !== b.o) { fwd.o = JSON.parse(b.o); back.o = JSON.parse(a.o); n++; }
+    return n ? [fwd, back] : null;
+  };
+  const clone = v => JSON.parse(JSON.stringify(v));
+  const replace = (obj, v, keep) => {
+    for (const k of Object.keys(obj)) if (k !== keep && !(k in v)) delete obj[k];
+    Object.assign(obj, clone(v));
+  };
+  // puts items in the order of ids; any not named keep their place at the end
+  const order = (arr, ids) => {
+    const at = new Map(ids.map((id, i) => [id, i]));
+    const named = arr.filter(x => at.has(x.id)).sort((x, y) => at.get(x.id) - at.get(y.id)), rest = arr.filter(x => !at.has(x.id));
+    arr.length = 0; arr.push(...named, ...rest);
+  };
+  // Changes the song in place, so anything holding on to a track or clip (a drag in progress) keeps working.
+  const apply = (p, d) => {
+    for (const k in d.m || {}) { if (NOT.has(k)) continue; if (d.m[k].length) p[k] = clone(d.m[k][0]); else delete p[k]; }
+    for (const id in d.t || {}) {
+      const v = d.t[id], i = p.tracks.findIndex(t => t.id === id);
+      if (!v) { if (i >= 0) p.tracks.splice(i, 1); continue; }
+      let t = p.tracks[i];
+      if (!t) { t = { clips: [] }; p.tracks.push(t); }
+      replace(t, v.f, 'clips'); t.id = id;
+    }
+    for (const id in d.c || {}) {
+      const v = d.c[id];
+      let from = null, clip = null;
+      for (const t of p.tracks) { const c = t.clips.find(x => x.id === id); if (c) { from = t; clip = c; break; } }
+      const to = v && p.tracks.find(t => t.id === v.t);
+      if (from && (!v || from !== to)) from.clips.splice(from.clips.indexOf(clip), 1);
+      if (!v || !to) continue;
+      if (clip) replace(clip, v.v); else clip = clone(v.v);
+      if (from !== to) to.clips.push(clip);
+    }
+    if (d.o) order(p.tracks, d.o);
+    for (const id in d.t || {}) { const t = d.t[id] && p.tracks.find(x => x.id === id); if (t) order(t.clips, d.t[id].co); }
+  };
+  L.patch = { snap, diff, apply };
+
   // Every change is saved in this browser: the open song in localStorage (read first on start-up),
   // and every song in IndexedDB, so starting a new one never loses the last.
-  let hist = [], hi = -1, saveT = 0;
-  const persist = () => {
+  // quiet: the change came from someone else working on the song, who saves it to the account themselves
+  let hist = [], hi = -1, base = null, saveT = 0, quiet = true;
+  const persist = q => {
     clearTimeout(saveT);
+    quiet = quiet && !!q;
     L.emit('savestate', 'pending');
     saveT = setTimeout(async () => {
       saveT = 0;
-      const json = hist[hi], p = L.project;
+      const p = L.project, json = JSON.stringify(p);
       try { localStorage.setItem('lathe.project', json); } catch { /* storage full or blocked */ }
       // a song joins the list once it has something in it, so empty starts do not pile up
       if (p.tracks.some(t => t.clips.length) || p.video) try { await L.idbPut('songs', p.id, { id: p.id, name: p.name, at: Date.now(), json }); } catch { /* no IndexedDB */ }
-      L.emit('savestate', 'local');
+      L.emit('savestate', quiet ? 'quiet' : 'local');
+      quiet = true;
     }, 400);
   };
   L.savePending = () => !!saveT;
   L.commit = () => {
-    hist.length = hi + 1;
-    hist.push(JSON.stringify(L.project));
-    if (hist.length > 120) hist.shift();
-    hi = hist.length - 1;
+    const now = snap(L.project), d = diff(base, now);
+    base = now;
+    if (d) {
+      hist.length = hi + 1;
+      hist.push(d);
+      if (hist.length > 120) hist.shift();
+      hi = hist.length - 1;
+      L.emit('patch', d[0]);
+    }
     fixSel(); persist(); L.emit('change');
   };
-  const travel = d => {
-    if (hi + d < 0 || hi + d >= hist.length) return;
-    hi += d;
-    L.project = JSON.parse(hist[hi]);
+  const travel = dir => {
+    const h = dir < 0 ? hist[hi] : hist[hi + 1];
+    if (!h) return;
+    hi += dir;
+    const d = dir < 0 ? h[1] : h[0];
+    apply(L.project, d);
+    base = snap(L.project);
+    L.emit('patch', d);
     L.sel.notes.clear(); fixSel(); persist(); L.emit('change');
+  };
+  // a change made by someone else on the same song
+  L.applyRemote = d => {
+    apply(L.project, d);
+    base = snap(L.project);
+    fixSel(); persist(true); L.emit('change');
   };
   L.undo = () => travel(-1);
   L.redo = () => travel(1);
@@ -176,7 +261,7 @@
   };
   L.setProject = p => {
     upgrade(p);
-    L.project = p; hist = [JSON.stringify(p)]; hi = 0;
+    L.project = p; hist = []; hi = -1; base = snap(p);
     L.sel.track = null; L.sel.clip = null; L.sel.notes.clear(); L.pos = 0;
     fixSel(); persist(); L.emit('load'); L.emit('change');
   };

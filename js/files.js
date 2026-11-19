@@ -198,7 +198,7 @@ L.files = (() => {
     const p = JSON.parse(JSON.stringify(L.project));
     const dropped = p.tracks.filter(t => t.type === 'audio' && t.clips.length).length;
     p.tracks = p.tracks.filter(t => !(t.type === 'audio' && t.clips.length));
-    delete p.video; delete p.id; // whoever opens the link gets a song of their own
+    delete p.video; delete p.id; delete p.live; // whoever opens the link gets a song of their own
     const packed = await new Response(new Blob([JSON.stringify(p)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
     const url = location.origin + location.pathname + '#song=' + b64url(packed);
     const note = dropped ? ` Recorded audio is not included (${dropped} track${dropped > 1 ? 's' : ''} left out); use File, Save for those.` : '';

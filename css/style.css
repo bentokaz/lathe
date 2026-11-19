@@ -682,3 +682,22 @@ dl.cr dt { font: 600 12px var(--f); }
 
 /* dark themes: the brand block, the master strip and the start screen header stay dark, like the wells */
 :root[data-dark] :is(#brand, .strip.master, .st-brand) { --ink: color-mix(in srgb, var(--cp-paper) 45%, #000); --paper: var(--cp-text); --paper-3: var(--cp-text-3); --rule: var(--cp-dim); --dim: var(--cp-dim); --ink-3: var(--cp-paper-3); }
+
+/* ---------- working together ---------- */
+#people { display: flex; align-items: center; gap: 3px; margin-right: 2px; }
+#people:empty { display: none; }
+.pp { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--pc); color: #fff; font: 600 10.5px/1 var(--m); text-transform: uppercase; flex: none; }
+.pp-off { font: 9.5px var(--m); color: var(--sig); padding: 0 4px; }
+#file #b-together.on { background: var(--ink); color: var(--paper); }
+#together { width: min(560px, 94vw); }
+#together h3 { font: 600 11px var(--m); text-transform: uppercase; letter-spacing: .08em; margin: 14px 0 4px; color: var(--ink); }
+#together .strong { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.tg-link { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.tg-link input { font: 12px var(--m); padding: 7px 9px; border: 1px solid var(--ink); border-radius: 2px; background: var(--paper); color: var(--ink); min-width: 0; user-select: text; }
+.tg-ppl { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--ink); }
+.tg-ppl li { display: flex; align-items: center; gap: 9px; padding: 6px 2px; border-bottom: 1px solid var(--paper-3); font-size: 13px; }
+.tg-ppl li b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tg-ppl small { font: 10px var(--m); color: var(--dim); }
+.tg-ppl .ib { border-color: transparent; width: 28px; height: 26px; display: grid; place-items: center; padding: 0; }
+.tg-ppl .tg-none { color: var(--dim); }
+.tg-small { font-size: 12px !important; color: var(--ink-4) !important; margin-top: 10px !important; }

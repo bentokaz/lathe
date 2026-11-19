@@ -86,7 +86,7 @@
   function save() {
     const audio = {};
     for (const id of L.usedBuffers(L.project)) { const b = L.buffers.get(id); if (b) audio[id] = b64(L.wav(b)); }
-    L.download(new Blob([JSON.stringify({ lathe: 1, project: L.project, audio })], { type: 'application/json' }), fileName() + '.lathe.json');
+    L.download(new Blob([JSON.stringify({ lathe: 1, project: { ...L.project, live: undefined }, audio })], { type: 'application/json' }), fileName() + '.lathe.json');
     L.toast('Project file saved');
   }
   $('#b-save').onclick = save;
